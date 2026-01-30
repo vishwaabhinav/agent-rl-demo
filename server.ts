@@ -23,6 +23,16 @@ import {
   buildStateTransitionPrompt,
 } from "./src/lib/voice";
 
+// Import simulation module
+import {
+  runSimulation,
+  stopSimulation,
+  getPersonaById,
+  type SimulationSession,
+  type SimulationConfig,
+  type OrchestratorCallbacks,
+} from "./src/simulation";
+
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -32,6 +42,7 @@ const port = parseInt(process.env.PORT || "3000", 10);
 // =============================================================================
 
 const sessions = new Map<string, VoiceSession>();
+const simulations = new Map<string, SimulationSession>();
 
 // =============================================================================
 // OpenAI Realtime API Connection
@@ -575,6 +586,120 @@ async function startServer() {
         });
 
         console.log(`[Call] Ended: ${session.id}, duration: ${duration}s`);
+      }
+    });
+
+    // ==========================================================================
+    // Simulation Start
+    // ==========================================================================
+
+    socket.on("simulation:start", async (data: { personaId: string; policyType: string }) => {
+      console.log("[Simulation] Received simulation:start", data);
+
+      const persona = getPersonaById(data.personaId);
+      if (!persona) {
+        socket.emit("simulation:error", { error: `Persona not found: ${data.personaId}` });
+        return;
+      }
+
+      const simulationId = `sim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      socket.join(simulationId);
+
+      socket.emit("simulation:starting", {
+        simulationId,
+        persona: {
+          id: persona.id,
+          name: persona.name,
+          path: persona.path,
+        },
+        policyType: data.policyType,
+      });
+
+      const config: SimulationConfig = {
+        personaId: data.personaId,
+        policyType: data.policyType as "none" | "bandit" | "qlearning",
+      };
+
+      const callbacks: OrchestratorCallbacks = {
+        onTranscript: (side, text, isFinal) => {
+          io.to(simulationId).emit("simulation:transcript", {
+            side,
+            text,
+            isFinal,
+            timestamp: new Date(),
+          });
+        },
+        onAudio: (side, base64Audio) => {
+          io.to(simulationId).emit("simulation:audio", {
+            side,
+            audio: base64Audio,
+          });
+        },
+        onStateChange: (agentState, borrowerPathIndex) => {
+          io.to(simulationId).emit("simulation:stateChange", {
+            agentState,
+            borrowerPathIndex,
+          });
+        },
+        onDecision: (decision) => {
+          io.to(simulationId).emit("simulation:decision", {
+            turn: decision.turn,
+            selectedAction: decision.selectedAction,
+            policyDecisionMs: decision.policyDecisionMs,
+            availableActions: decision.availableActions,
+          });
+        },
+        onComplete: (result) => {
+          io.to(simulationId).emit("simulation:complete", {
+            simulationId: result.simulationId,
+            completed: result.completed,
+            pathCompleted: result.pathCompleted,
+            finalState: result.finalState,
+            outcome: result.outcome,
+            totalTurns: result.totalTurns,
+            totalDurationMs: result.totalDurationMs,
+          });
+          simulations.delete(simulationId);
+        },
+        onError: (error) => {
+          io.to(simulationId).emit("simulation:error", {
+            error: error.message,
+          });
+          simulations.delete(simulationId);
+        },
+      };
+
+      try {
+        // Note: runSimulation returns a promise that resolves when simulation completes
+        // For now we don't await it - it runs in background and emits events
+        runSimulation(config, callbacks).catch((err) => {
+          console.error("[Simulation] Error:", err);
+          io.to(simulationId).emit("simulation:error", { error: err.message });
+        });
+
+        socket.emit("simulation:started", { simulationId });
+      } catch (error) {
+        console.error("[Simulation] Failed to start:", error);
+        socket.emit("simulation:error", {
+          error: error instanceof Error ? error.message : "Failed to start simulation",
+        });
+      }
+    });
+
+    // ==========================================================================
+    // Simulation Stop
+    // ==========================================================================
+
+    socket.on("simulation:stop", (data: { simulationId: string }) => {
+      console.log("[Simulation] Received simulation:stop", data);
+      const session = simulations.get(data.simulationId);
+
+      if (session) {
+        stopSimulation(session);
+        simulations.delete(data.simulationId);
+        io.to(data.simulationId).emit("simulation:stopped", {
+          simulationId: data.simulationId,
+        });
       }
     });
 
