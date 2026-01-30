@@ -76,54 +76,48 @@ export default function SimulationPage() {
     clearAudioQueue();
   }, [stopSimulation, clearAudioQueue]);
 
+  function getStatusStyle(s: string): string {
+    switch (s) {
+      case "active":
+        return "bg-emerald-500/20 text-emerald-400";
+      case "starting":
+        return "bg-amber-500/20 text-amber-400";
+      case "completed":
+        return "bg-blue-500/20 text-blue-400";
+      case "error":
+        return "bg-red-500/20 text-red-400";
+      default:
+        return "bg-zinc-800 text-zinc-400";
+    }
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <TopNav />
-      {/* Header */}
-      <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Voice Simulation</h1>
-              <p className="text-sm text-zinc-500 mt-1">
-                Voice-to-voice agent simulation with RL policy injection
-              </p>
+      <TopNav
+        title="Voice Simulation"
+        description="Voice-to-voice agent simulation with RL policy injection"
+        statusIndicator={
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  isConnected ? "bg-emerald-500" : "bg-red-500"
+                }`}
+              />
+              <span className="text-zinc-500">
+                {isConnected ? "Connected" : "Disconnected"}
+              </span>
             </div>
-            <div className="flex items-center gap-3">
-              {/* Connection Status */}
-              <div className="flex items-center gap-2 text-xs">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    isConnected ? "bg-emerald-500" : "bg-red-500"
-                  }`}
-                />
-                <span className="text-zinc-500">
-                  {isConnected ? "Connected" : "Disconnected"}
-                </span>
+            {status !== "idle" && (
+              <div
+                className={`px-2 py-1 rounded text-xs font-medium ${getStatusStyle(status)}`}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
               </div>
-
-              {/* Simulation Status */}
-              {status !== "idle" && (
-                <div
-                  className={`px-2 py-1 rounded text-xs font-medium ${
-                    status === "active"
-                      ? "bg-emerald-500/20 text-emerald-400"
-                      : status === "starting"
-                      ? "bg-amber-500/20 text-amber-400"
-                      : status === "completed"
-                      ? "bg-blue-500/20 text-blue-400"
-                      : status === "error"
-                      ? "bg-red-500/20 text-red-400"
-                      : "bg-zinc-800 text-zinc-400"
-                  }`}
-                >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-6">

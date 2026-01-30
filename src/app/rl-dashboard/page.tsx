@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { LearningDashboard } from "@/components/rl/learning-dashboard";
 import { EpisodeExplorer } from "@/components/rl/episode-explorer";
 import { PolicyInspector } from "@/components/rl/policy-inspector";
@@ -84,64 +84,64 @@ export default function RLDashboardPage() {
     loadExperiment();
   }, [selectedFile]);
 
+  function renderStatusIndicator(): React.ReactNode {
+    if (isLoading) {
+      return (
+        <>
+          <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+          <span className="text-zinc-400">Loading...</span>
+        </>
+      );
+    }
+    if (experimentData) {
+      return (
+        <>
+          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="text-zinc-400">Ready</span>
+        </>
+      );
+    }
+    return (
+      <>
+        <div className="w-2 h-2 rounded-full bg-zinc-600" />
+        <span className="text-zinc-500">No data</span>
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <TopNav />
-      {/* Header */}
-      <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                RL Training Dashboard
-              </h1>
-              <p className="text-sm text-zinc-500 mt-1">
-                Debt Collection Agent Learning Analytics
-              </p>
-            </div>
-
-            {/* Experiment Selector */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-zinc-500">Experiment:</label>
-                <select
-                  value={selectedFile}
-                  onChange={(e) => setSelectedFile(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                >
-                  <option value="">Select experiment...</option>
-                  {availableFiles.map((file) => (
-                    <option key={file} value={file}>
-                      {file.replace(".json", "")}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Status indicator */}
-              <div className="flex items-center gap-2 text-sm">
-                {isLoading ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-zinc-400">Loading...</span>
-                  </>
-                ) : experimentData ? (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-zinc-400">Ready</span>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-2 h-2 rounded-full bg-zinc-600" />
-                    <span className="text-zinc-500">No data</span>
-                  </>
-                )}
-              </div>
-            </div>
+      <TopNav
+        title="RL Training Dashboard"
+        description="Debt Collection Agent Learning Analytics"
+        statusIndicator={
+          <div className="flex items-center gap-2 text-sm">
+            {renderStatusIndicator()}
           </div>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-zinc-500">Experiment:</label>
+            <select
+              value={selectedFile}
+              onChange={(e) => setSelectedFile(e.target.value)}
+              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            >
+              <option value="">Select experiment...</option>
+              {availableFiles.map((file) => (
+                <option key={file} value={file}>
+                  {file.replace(".json", "")}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+      />
 
-          {/* Tab Navigation */}
-          <nav className="flex gap-1 mt-4 -mb-px">
+      {/* Tab Navigation */}
+      <div className="border-b border-zinc-800 bg-zinc-900/30">
+        <div className="max-w-7xl mx-auto px-6">
+          <nav className="flex gap-1 -mb-px">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -158,7 +158,7 @@ export default function RLDashboardPage() {
             ))}
           </nav>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
