@@ -1,4 +1,4 @@
-import type { LLMOutput, PolicyConfig, ValidationResult, ValidationFailure, Intent } from "../types.ts";
+import type { LLMOutput, PolicyConfig, ValidationResult, ValidationFailure, Intent } from "../types";
 
 export interface ValidatorInput {
   llmOutput: LLMOutput;

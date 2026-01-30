@@ -1,4 +1,4 @@
-import type { FSMState, Intent, UserSignal } from "../types.ts";
+import type { FSMState, Intent, UserSignal } from "../types";
 
 // Allowed intents per state - what the agent can do in each state
 export const STATE_ALLOWED_INTENTS: Record<FSMState, Intent[]> = {
@@ -17,6 +17,7 @@ export const STATE_ALLOWED_INTENTS: Record<FSMState, Intent[]> = {
   ],
   PAYMENT_SETUP: ["CONFIRM_PLAN", "SEND_PAYMENT_LINK", "ASK_CLARIFY", "PROCEED"],
   WRAPUP: ["SUMMARIZE", "PROCEED"],
+  CALLBACK_SCHEDULED: ["SUMMARIZE", "PROCEED"],
   DISPUTE_FLOW: ["ACKNOWLEDGE_DISPUTE", "EMPATHIZE", "PROCEED"],
   WRONG_PARTY_FLOW: ["APOLOGIZE", "PROCEED"],
   DO_NOT_CALL: ["ACKNOWLEDGE_DNC", "PROCEED"],

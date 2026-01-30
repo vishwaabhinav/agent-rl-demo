@@ -11,8 +11,19 @@ interface Persona {
   path: FSMState[];
 }
 
+interface LearnerFile {
+  filename: string;
+  type: "bandit" | "qlearning" | "unknown";
+  episodesTrained: number;
+  modifiedAt: string;
+}
+
 interface ConfigPanelProps {
-  onStart: (config: { personaId: string; policyType: string }) => void;
+  onStart: (config: {
+    personaId: string;
+    policyType: string;
+    learnerFilename?: string;
+  }) => void;
   onStop: () => void;
   isRunning: boolean;
   disabled?: boolean;
@@ -20,9 +31,12 @@ interface ConfigPanelProps {
 
 export function ConfigPanel({ onStart, onStop, isRunning, disabled }: ConfigPanelProps) {
   const [personas, setPersonas] = useState<Persona[]>([]);
+  const [learners, setLearners] = useState<LearnerFile[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<string>("");
   const [policyType, setPolicyType] = useState<string>("none");
+  const [selectedLearner, setSelectedLearner] = useState<string>("");
 
+  // Load personas
   useEffect(() => {
     fetch("/api/simulation?action=personas")
       .then((res) => res.json())
@@ -35,7 +49,37 @@ export function ConfigPanel({ onStart, onStop, isRunning, disabled }: ConfigPane
       .catch(console.error);
   }, []);
 
+  // Load available learners
+  useEffect(() => {
+    fetch("/api/simulation?action=learners")
+      .then((res) => res.json())
+      .then((data) => {
+        setLearners(data.learners || []);
+      })
+      .catch(console.error);
+  }, []);
+
+  // Filter learners by policy type
+  const filteredLearners = learners.filter((l) => {
+    if (policyType === "bandit") return l.type === "bandit";
+    if (policyType === "qlearning") return l.type === "qlearning";
+    return false;
+  });
+
+  // Reset learner selection when policy type changes
+  useEffect(() => {
+    setSelectedLearner("");
+  }, [policyType]);
+
   const selectedPersonaData = personas.find((p) => p.id === selectedPersona);
+
+  const handleStart = () => {
+    onStart({
+      personaId: selectedPersona,
+      policyType,
+      learnerFilename: policyType !== "none" ? selectedLearner || undefined : undefined,
+    });
+  };
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-4">
@@ -86,6 +130,33 @@ export function ConfigPanel({ onStart, onStop, isRunning, disabled }: ConfigPane
         </div>
       </div>
 
+      {/* Learner Selection (when policy is not "none") */}
+      {policyType !== "none" && (
+        <div>
+          <label className="block text-xs text-zinc-500 mb-1">
+            Load Trained Policy (Optional)
+          </label>
+          <select
+            value={selectedLearner}
+            onChange={(e) => setSelectedLearner(e.target.value)}
+            disabled={isRunning || disabled}
+            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-300"
+          >
+            <option value="">New (untrained)</option>
+            {filteredLearners.map((l) => (
+              <option key={l.filename} value={l.filename}>
+                {l.filename} ({l.episodesTrained} episodes)
+              </option>
+            ))}
+          </select>
+          {filteredLearners.length === 0 && (
+            <p className="text-xs text-zinc-500 mt-1">
+              No trained {policyType} policies found in rl-results/
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Path Preview */}
       {selectedPersonaData && selectedPersonaData.path && (
         <div>
@@ -109,7 +180,7 @@ export function ConfigPanel({ onStart, onStop, isRunning, disabled }: ConfigPane
       <div className="pt-2">
         {!isRunning ? (
           <button
-            onClick={() => onStart({ personaId: selectedPersona, policyType })}
+            onClick={handleStart}
             disabled={disabled || !selectedPersona}
             className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-700 text-white font-medium py-2 px-4 rounded transition-colors"
           >

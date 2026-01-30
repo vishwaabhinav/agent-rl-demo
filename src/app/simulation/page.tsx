@@ -1,93 +1,170 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useMemo } from "react";
 import { ConfigPanel } from "@/components/simulation/ConfigPanel";
 import { DualTranscript } from "@/components/simulation/DualTranscript";
 import { DecisionInspector } from "@/components/simulation/DecisionInspector";
 import { PathProgress } from "@/components/simulation/PathProgress";
 import { AudioPlayer } from "@/components/simulation/AudioPlayer";
-import type { FSMState } from "@/lib/types";
-
-interface TranscriptMessage {
-  id: string;
-  side: "agent" | "borrower";
-  text: string;
-  timestamp: Date;
-  isFinal: boolean;
-}
-
-interface Decision {
-  turn: number;
-  selectedAction: string;
-  policyDecisionMs: number;
-}
-
-interface Persona {
-  id: string;
-  name: string;
-  description: string;
-  pathLength: number;
-  path: FSMState[];
-}
+import { useSimulationSocket } from "@/hooks/useSimulationSocket";
+import { useStereoAudioPlayback } from "@/hooks/useStereoAudioPlayback";
 
 export default function SimulationPage() {
-  const [isRunning, setIsRunning] = useState(false);
-  const [messages, setMessages] = useState<TranscriptMessage[]>([]);
-  const [decisions, setDecisions] = useState<Decision[]>([]);
-  const [agentState, setAgentState] = useState<FSMState>("OPENING");
-  const [pathIndex, setPathIndex] = useState(0);
-  const [currentPath, setCurrentPath] = useState<FSMState[]>([]);
-  const [agentPending, setAgentPending] = useState("");
-  const [borrowerPending, setBorrowerPending] = useState("");
-  const [personas, setPersonas] = useState<Persona[]>([]);
+  // Stereo audio playback
+  const {
+    isPlaying: isAudioPlaying,
+    queueAgentAudio,
+    queueBorrowerAudio,
+    agentVolume,
+    setAgentVolume,
+    borrowerVolume,
+    setBorrowerVolume,
+    clearQueue: clearAudioQueue,
+  } = useStereoAudioPlayback({ enabled: true });
 
-  // Load personas on mount
-  useEffect(() => {
-    fetch("/api/simulation?action=personas")
-      .then((res) => res.json())
-      .then((data) => {
-        setPersonas(data.personas || []);
-      })
-      .catch(console.error);
-  }, []);
+  // Audio callbacks for socket
+  const audioCallbacks = useMemo(
+    () => ({
+      onAgentAudio: queueAgentAudio,
+      onBorrowerAudio: queueBorrowerAudio,
+    }),
+    [queueAgentAudio, queueBorrowerAudio]
+  );
 
-  const handleStart = (config: { personaId: string; policyType: string }) => {
-    console.log("Starting simulation with config:", config);
-    setIsRunning(true);
-    setMessages([]);
-    setDecisions([]);
-    setAgentState("OPENING");
-    setPathIndex(0);
+  // Simulation socket connection
+  const {
+    simulationId,
+    status,
+    personaPath,
+    agentState,
+    borrowerPathIndex,
+    messages,
+    decisions,
+    agentPending,
+    borrowerPending,
+    error,
+    result,
+    isConnected,
+    startSimulation,
+    stopSimulation,
+    resetSimulation,
+  } = useSimulationSocket(audioCallbacks);
 
-    // Find selected persona and set its path
-    const selectedPersona = personas.find((p) => p.id === config.personaId);
-    if (selectedPersona?.path) {
-      setCurrentPath(selectedPersona.path);
-    }
+  const isRunning = status === "starting" || status === "active";
 
-    // TODO: Connect to Socket.IO and start simulation
-    // The orchestrator would emit events that update state here
-  };
+  // Transform messages for DualTranscript
+  const transcriptMessages = useMemo(
+    () =>
+      messages.map((m) => ({
+        ...m,
+        timestamp: new Date(m.timestamp),
+      })),
+    [messages]
+  );
 
-  const handleStop = () => {
-    console.log("Stopping simulation");
-    setIsRunning(false);
-  };
+  const handleStart = useCallback(
+    (config: { personaId: string; policyType: string; learnerFilename?: string }) => {
+      clearAudioQueue();
+      startSimulation(config);
+    },
+    [clearAudioQueue, startSimulation]
+  );
+
+  const handleStop = useCallback(() => {
+    stopSimulation();
+    clearAudioQueue();
+  }, [stopSimulation, clearAudioQueue]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Header */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <h1 className="text-2xl font-semibold tracking-tight">Voice Simulation</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Voice-to-voice agent simulation with RL policy injection
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Voice Simulation</h1>
+              <p className="text-sm text-zinc-500 mt-1">
+                Voice-to-voice agent simulation with RL policy injection
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Connection Status */}
+              <div className="flex items-center gap-2 text-xs">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    isConnected ? "bg-emerald-500" : "bg-red-500"
+                  }`}
+                />
+                <span className="text-zinc-500">
+                  {isConnected ? "Connected" : "Disconnected"}
+                </span>
+              </div>
+
+              {/* Simulation Status */}
+              {status !== "idle" && (
+                <div
+                  className={`px-2 py-1 rounded text-xs font-medium ${
+                    status === "active"
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : status === "starting"
+                      ? "bg-amber-500/20 text-amber-400"
+                      : status === "completed"
+                      ? "bg-blue-500/20 text-blue-400"
+                      : status === "error"
+                      ? "bg-red-500/20 text-red-400"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-6">
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        )}
+
+        {/* Result Display */}
+        {result && status === "completed" && (
+          <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <h3 className="text-sm font-medium text-blue-400 mb-2">Simulation Complete</h3>
+            <div className="grid grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="text-zinc-500">Outcome:</span>{" "}
+                <span className="text-zinc-300">{result.outcome}</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Final State:</span>{" "}
+                <span className="text-zinc-300">{result.finalState}</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Turns:</span>{" "}
+                <span className="text-zinc-300">{result.totalTurns}</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Duration:</span>{" "}
+                <span className="text-zinc-300">
+                  {(result.totalDurationMs / 1000).toFixed(1)}s
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={resetSimulation}
+              className="mt-3 text-xs text-blue-400 hover:text-blue-300"
+            >
+              Start New Simulation
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-12 gap-6">
           {/* Left Column - Config */}
           <div className="col-span-3 space-y-4">
@@ -95,10 +172,11 @@ export default function SimulationPage() {
               onStart={handleStart}
               onStop={handleStop}
               isRunning={isRunning}
+              disabled={!isConnected}
             />
             <PathProgress
-              path={currentPath}
-              currentIndex={pathIndex}
+              path={personaPath}
+              currentIndex={borrowerPathIndex}
               agentState={agentState}
             />
           </div>
@@ -107,7 +185,7 @@ export default function SimulationPage() {
           <div className="col-span-6">
             <div className="h-[500px]">
               <DualTranscript
-                messages={messages}
+                messages={transcriptMessages}
                 agentPending={agentPending}
                 borrowerPending={borrowerPending}
               />
@@ -119,12 +197,14 @@ export default function SimulationPage() {
             <DecisionInspector
               currentDecision={decisions[decisions.length - 1]}
               decisionHistory={decisions}
-              isDeciding={false}
+              isDeciding={status === "active" && decisions.length > 0}
             />
             <AudioPlayer
-              agentAudioQueue={[]}
-              borrowerAudioQueue={[]}
-              isPlaying={isRunning}
+              isPlaying={isAudioPlaying && isRunning}
+              agentVolume={agentVolume}
+              borrowerVolume={borrowerVolume}
+              onAgentVolumeChange={setAgentVolume}
+              onBorrowerVolumeChange={setBorrowerVolume}
             />
           </div>
         </div>

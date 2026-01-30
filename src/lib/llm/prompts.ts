@@ -1,4 +1,4 @@
-import type { FSMState, Intent, CaseData, LLMInput } from "../types.ts";
+import type { FSMState, Intent, CaseData, LLMInput } from "../types";
 
 // State-specific guidance for the agent
 const STATE_GUIDANCE: Record<FSMState, string> = {
@@ -41,6 +41,12 @@ const STATE_GUIDANCE: Record<FSMState, string> = {
 - Explain how payment can be made
 - Offer to send payment link/instructions
 - Confirm contact information for confirmation`,
+
+  CALLBACK_SCHEDULED: `A callback has been scheduled:
+- Confirm the callback date and time
+- Verify the phone number to call back
+- Summarize what will be discussed on the callback
+- Thank them and end the call professionally`,
 
   WRAPUP: `Conclude the call professionally:
 - Summarize any agreements made

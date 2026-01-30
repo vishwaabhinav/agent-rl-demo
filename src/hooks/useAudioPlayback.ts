@@ -81,7 +81,7 @@ export function useAudioPlayback({
       audioData.length,
       sampleRate
     );
-    audioBuffer.copyToChannel(audioData, 0);
+    audioBuffer.copyToChannel(new Float32Array(audioData), 0);
 
     // Create buffer source
     const source = audioContext.createBufferSource();

@@ -114,7 +114,7 @@ export function useAudioCapture({
           const int16Data = float32ToInt16(float32Data);
 
           // Convert to base64
-          const base64 = arrayBufferToBase64(int16Data.buffer);
+          const base64 = arrayBufferToBase64(int16Data.buffer as ArrayBuffer);
           onAudioData(base64);
         }
       };

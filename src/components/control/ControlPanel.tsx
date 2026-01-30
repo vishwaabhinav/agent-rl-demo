@@ -2,6 +2,7 @@
 
 import { useCallStore, DEMO_CASES } from "@/stores/callStore";
 import { useConfigStore, JURISDICTION_PRESETS } from "@/stores/configStore";
+import { isActiveStatus, isTerminalStatus } from "@/lib/types";
 import {
   Select,
   SelectContent,
@@ -33,7 +34,8 @@ export function ControlPanel({ onInitiateCall, onEndCall }: ControlPanelProps) {
   const { currentCase, selectCase, status, reset, blockedReason, blockedRiskLevel } = useCallStore();
   const { config, setConfig, setJurisdiction } = useConfigStore();
 
-  const isCallActive = status === "active" || status === "connecting" || status === "ringing";
+  const isCallActive = isActiveStatus(status);
+  const isCallTerminal = isTerminalStatus(status);
   const canStartCall = currentCase && status === "idle";
 
   const formatCurrency = (amount: number) => {
@@ -266,7 +268,7 @@ export function ControlPanel({ onInitiateCall, onEndCall }: ControlPanelProps) {
 
       {/* Call Controls */}
       <section className="pt-2">
-        {!isCallActive && status !== "ended" ? (
+        {!isCallActive && !isCallTerminal ? (
           <Button
             onClick={() => {
               console.log("[ControlPanel] Initiate Call clicked", {
@@ -286,7 +288,7 @@ export function ControlPanel({ onInitiateCall, onEndCall }: ControlPanelProps) {
             <Phone className="w-4 h-4 mr-2" />
             Initiate Call
           </Button>
-        ) : status === "ended" || status === "declined" ? (
+        ) : isCallTerminal ? (
           <Button
             onClick={() => reset()}
             variant="outline"

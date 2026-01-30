@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import type { CaseData, Intent, LLMInput, LLMOutput } from "../types.ts";
-import { buildSystemPrompt, buildUserPrompt } from "./prompts.ts";
+import type { CaseData, Intent, LLMInput, LLMOutput } from "../types";
+import { buildSystemPrompt, buildUserPrompt } from "./prompts";
 
 // Initialize OpenAI client
 let openaiClient: OpenAI | null = null;

@@ -1,4 +1,4 @@
-import type { CaseData, FSMState, PolicyConfig, PolicyOutput } from "../types.ts";
+import type { CaseData, FSMState, PolicyConfig, PolicyOutput } from "../types";
 
 export interface PolicyCheckInput {
   caseData: CaseData;

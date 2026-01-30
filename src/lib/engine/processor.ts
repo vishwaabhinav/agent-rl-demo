@@ -8,12 +8,12 @@ import type {
   TurnTrace,
   UserSignal,
   ValidationResult,
-} from "../types.ts";
-import { FSMEngine, STATE_ALLOWED_INTENTS } from "./fsm.ts";
-import { policyEngine } from "./policy.ts";
-import { validateOutput, attemptRepair, getFallbackResponse } from "./validators.ts";
-import { generateResponse } from "../llm/client.ts";
-import { detectSignals } from "../llm/prompts.ts";
+} from "../types";
+import { FSMEngine, STATE_ALLOWED_INTENTS } from "./fsm";
+import { policyEngine } from "./policy";
+import { validateOutput, attemptRepair, getFallbackResponse } from "./validators";
+import { generateResponse } from "../llm/client";
+import { detectSignals } from "../llm/prompts";
 
 export interface ProcessorContext {
   fsm: FSMEngine;

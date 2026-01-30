@@ -34,7 +34,7 @@ import {
 } from "./src/simulation";
 
 // Import learners for loading saved state
-import { BanditLearner, QLearningLearner } from "./src/rl/learners";
+import { BanditLearner, QLearner } from "./src/rl/learners";
 import type { Learner } from "./src/rl/types";
 import * as fs from "fs";
 import * as path from "path";
@@ -633,7 +633,7 @@ async function startServer() {
               learner.load(content);
               console.log("[Simulation] Loaded bandit learner from", data.learnerFilename);
             } else if (data.policyType === "qlearning") {
-              learner = new QLearningLearner();
+              learner = new QLearner();
               learner.load(content);
               console.log("[Simulation] Loaded Q-learning learner from", data.learnerFilename);
             }

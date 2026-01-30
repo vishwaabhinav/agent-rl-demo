@@ -157,6 +157,19 @@ export interface ValidationFailure {
 
 export type CallStatus = "idle" | "ringing" | "connecting" | "active" | "ending" | "ended" | "declined";
 
+// Status type unions for cleaner conditional logic
+export type ActiveCallStatus = "ringing" | "connecting" | "active";
+export type TerminalCallStatus = "ended" | "declined";
+
+const ACTIVE_STATUSES: ActiveCallStatus[] = ["ringing", "connecting", "active"];
+const TERMINAL_STATUSES: TerminalCallStatus[] = ["ended", "declined"];
+
+export const isActiveStatus = (s: CallStatus): s is ActiveCallStatus =>
+  ACTIVE_STATUSES.includes(s as ActiveCallStatus);
+
+export const isTerminalStatus = (s: CallStatus): s is TerminalCallStatus =>
+  TERMINAL_STATUSES.includes(s as TerminalCallStatus);
+
 export interface CallState {
   status: CallStatus;
   sessionId: string | null;
