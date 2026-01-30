@@ -49,6 +49,7 @@ export interface AudioCallbacks {
 
 export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
   const socketRef = useRef<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const [state, setState] = useState<SimulationState>({
     simulationId: null,
     status: "idle",
@@ -75,10 +76,12 @@ export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
 
     socket.on("connect", () => {
       console.log("[SimSocket] Connected:", socket.id);
+      setIsConnected(true);
     });
 
     socket.on("disconnect", () => {
       console.log("[SimSocket] Disconnected");
+      setIsConnected(false);
     });
 
     // Simulation lifecycle events
@@ -272,7 +275,7 @@ export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
 
   return {
     ...state,
-    isConnected: !!socketRef.current?.connected,
+    isConnected,
     startSimulation,
     stopSimulation,
     resetSimulation,
