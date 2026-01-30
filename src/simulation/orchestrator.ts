@@ -82,6 +82,13 @@ export async function runSimulation(
   // Initialize session
   const session = initSession(persona, config, learner);
 
+  // Turn-taking state - shared between both sessions
+  const turnState: TurnState = {
+    currentSpeaker: "none",
+    agentAudioBuffer: [],
+    borrowerAudioBuffer: [],
+  };
+
   return new Promise((resolve, reject) => {
     try {
       // Track readiness
@@ -94,6 +101,7 @@ export async function runSimulation(
           session.startTime = Date.now();
           console.log("[Orchestrator] Both sessions ready, starting simulation");
           // Agent will start speaking first with greeting
+          turnState.currentSpeaker = "agent";
           session.agentSession?.triggerResponse();
         }
       };
@@ -102,13 +110,13 @@ export async function runSimulation(
       session.agentSession = createAgentSession(session, callbacks, () => {
         agentReady = true;
         checkBothReady();
-      });
+      }, turnState);
 
       // Create borrower session
       session.borrowerSession = createBorrowerSession(session, callbacks, () => {
         borrowerReady = true;
         checkBothReady();
-      });
+      }, turnState);
 
       // Set up completion check
       const checkCompletion = () => {
@@ -165,22 +173,31 @@ function initSession(
   };
 }
 
+// Turn-taking state
+interface TurnState {
+  currentSpeaker: "agent" | "borrower" | "none";
+  agentAudioBuffer: string[];
+  borrowerAudioBuffer: string[];
+}
+
 /**
  * Create agent Realtime session
  */
 function createAgentSession(
   session: SimulationSession,
   callbacks: OrchestratorCallbacks,
-  onReady: () => void
+  onReady: () => void,
+  turnState: TurnState
 ): RealtimeSessionHandle {
   const config: RealtimeSessionConfig = {
     instructions: buildAgentInstructions(DEMO_CASE, DEFAULT_POLICY_CONFIG),
     voice: "coral",
+    // Disable auto-response - we manage turns manually
     turnDetection: {
       type: "semantic_vad",
       eagerness: "medium",
-      createResponse: true,
-      interruptResponse: true,
+      createResponse: false,  // Manual turn management
+      interruptResponse: false,
     },
   };
 
@@ -204,12 +221,14 @@ function createAgentSession(
     },
     onAudioDelta: (audio) => {
       callbacks.onAudio?.("agent", audio);
-      // Pipe to borrower
-      session.borrowerSession?.sendAudio(audio);
+      // Buffer audio for borrower (don't pipe continuously)
+      turnState.agentAudioBuffer.push(audio);
     },
     onAgentSpeechEnd: () => {
-      // Agent finished speaking, check state transition
-      handleAgentTurnComplete(session, callbacks);
+      console.log("[Orchestrator] Agent finished speaking, buffered chunks:", turnState.agentAudioBuffer.length);
+      turnState.currentSpeaker = "none";
+      // Agent finished speaking, send buffered audio to borrower and trigger response
+      handleAgentTurnComplete(session, callbacks, turnState);
     },
     onError: (err) => {
       session.status = "error";
@@ -225,16 +244,18 @@ function createAgentSession(
 function createBorrowerSession(
   session: SimulationSession,
   callbacks: OrchestratorCallbacks,
-  onReady: () => void
+  onReady: () => void,
+  turnState: TurnState
 ): RealtimeSessionHandle {
   const config: RealtimeSessionConfig = {
     instructions: buildBorrowerInstructions(session.persona),
     voice: session.persona.voice,
+    // Disable auto-response - we manage turns manually
     turnDetection: {
       type: "semantic_vad",
       eagerness: session.persona.behavior.interruptEagerness,
-      createResponse: true,
-      interruptResponse: true,
+      createResponse: false,  // Manual turn management
+      interruptResponse: false,
     },
   };
 
@@ -262,12 +283,14 @@ function createBorrowerSession(
     },
     onAudioDelta: (audio) => {
       callbacks.onAudio?.("borrower", audio);
-      // Pipe to agent
-      session.agentSession?.sendAudio(audio);
+      // Buffer audio for agent (don't pipe continuously)
+      turnState.borrowerAudioBuffer.push(audio);
     },
     onAgentSpeechEnd: () => {
-      // Borrower finished speaking, prepare for agent response
-      handleBorrowerTurnComplete(session, callbacks);
+      console.log("[Orchestrator] Borrower finished speaking, buffered chunks:", turnState.borrowerAudioBuffer.length);
+      turnState.currentSpeaker = "none";
+      // Borrower finished speaking, send buffered audio to agent and trigger response
+      handleBorrowerTurnComplete(session, callbacks, turnState);
     },
     onError: (err) => {
       session.status = "error";
@@ -282,7 +305,8 @@ function createBorrowerSession(
  */
 async function handleAgentTurnComplete(
   session: SimulationSession,
-  callbacks: OrchestratorCallbacks
+  callbacks: OrchestratorCallbacks,
+  turnState: TurnState
 ): Promise<void> {
   // Classify state from conversation
   const llmResult = await classifyStateWithLLM(
@@ -323,9 +347,16 @@ async function handleAgentTurnComplete(
     return;
   }
 
-  // Agent finished speaking, now tell borrower to respond
-  // VAD doesn't work well on piped synthesized audio, so we explicitly trigger
-  console.log("[Orchestrator] Agent finished speaking, triggering borrower response");
+  // Send buffered agent audio to borrower all at once
+  console.log("[Orchestrator] Sending", turnState.agentAudioBuffer.length, "audio chunks to borrower");
+  for (const audio of turnState.agentAudioBuffer) {
+    session.borrowerSession?.sendAudio(audio);
+  }
+  turnState.agentAudioBuffer = []; // Clear buffer
+
+  // Now trigger borrower to respond
+  console.log("[Orchestrator] Triggering borrower response");
+  turnState.currentSpeaker = "borrower";
   session.borrowerSession?.commitAudioAndRespond();
 }
 
@@ -334,7 +365,8 @@ async function handleAgentTurnComplete(
  */
 async function handleBorrowerTurnComplete(
   session: SimulationSession,
-  callbacks: OrchestratorCallbacks
+  callbacks: OrchestratorCallbacks,
+  turnState: TurnState
 ): Promise<void> {
   session.turnIndex++;
 
@@ -386,9 +418,16 @@ async function handleBorrowerTurnComplete(
     session.agentSession?.injectSystemMessage(decision.injectedPrompt);
   }
 
-  // Agent needs to respond after borrower speaks
-  // VAD doesn't work well on piped synthesized audio, so we explicitly trigger
-  console.log("[Orchestrator] Borrower finished speaking, triggering agent response");
+  // Send buffered borrower audio to agent all at once
+  console.log("[Orchestrator] Sending", turnState.borrowerAudioBuffer.length, "audio chunks to agent");
+  for (const audio of turnState.borrowerAudioBuffer) {
+    session.agentSession?.sendAudio(audio);
+  }
+  turnState.borrowerAudioBuffer = []; // Clear buffer
+
+  // Now trigger agent to respond
+  console.log("[Orchestrator] Triggering agent response");
+  turnState.currentSpeaker = "agent";
   session.agentSession?.commitAudioAndRespond();
 }
 

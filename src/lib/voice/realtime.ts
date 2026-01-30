@@ -18,10 +18,17 @@ const REALTIME_API_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime";
 /**
  * Create a new OpenAI Realtime session
  */
+// Generate a short ID for logging
+let sessionCounter = 0;
+
 export function createRealtimeSession(
   config: RealtimeSessionConfig,
   callbacks: RealtimeSessionCallbacks
 ): RealtimeSessionHandle {
+  const sessionId = `S${++sessionCounter}`;
+  const log = (msg: string, ...args: any[]) => console.log(`[Realtime:${sessionId}]`, msg, ...args);
+  const logError = (msg: string, ...args: any[]) => console.error(`[Realtime:${sessionId}]`, msg, ...args);
+
   const ws = new WebSocket(REALTIME_API_URL, {
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -33,7 +40,7 @@ export function createRealtimeSession(
   let agentTranscript = "";
 
   ws.on("open", () => {
-    console.log("[Realtime] WebSocket connected");
+    log("WebSocket connected");
 
     // Configure the session
     ws.send(
@@ -95,6 +102,8 @@ export function createRealtimeSession(
             audio: base64Audio,
           })
         );
+      } else {
+        console.warn("[Realtime] sendAudio: WebSocket not open, state:", ws.readyState);
       }
     },
 
@@ -135,11 +144,16 @@ export function createRealtimeSession(
     },
 
     commitAudioAndRespond: () => {
+      console.log("[Realtime] commitAudioAndRespond called, ws.readyState:", ws.readyState, "OPEN:", WebSocket.OPEN);
       if (ws.readyState === WebSocket.OPEN) {
         // Commit the input audio buffer (like pressing "send")
+        console.log("[Realtime] Sending input_audio_buffer.commit");
         ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
         // Then trigger a response
+        console.log("[Realtime] Sending response.create");
         ws.send(JSON.stringify({ type: "response.create" }));
+      } else {
+        console.error("[Realtime] Cannot commitAudioAndRespond - WebSocket not open");
       }
     },
 
@@ -228,9 +242,9 @@ function handleRealtimeEvent(
       break;
 
     default:
-      // Ignore rate_limits and other routine events
+      // Log all events for debugging
       if (!type?.startsWith("rate_limits")) {
-        // console.log(`[Realtime] Event: ${type}`);
+        console.log(`[Realtime] Event: ${type}`);
       }
   }
 }

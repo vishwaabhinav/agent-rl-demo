@@ -702,6 +702,83 @@ async function startServer() {
             totalTurns: result.totalTurns,
             totalDurationMs: result.totalDurationMs,
           });
+
+          // Save result to rl-results directory in dashboard-compatible format
+          try {
+            const resultsDir = path.join(process.cwd(), "rl-results");
+            if (!fs.existsSync(resultsDir)) {
+              fs.mkdirSync(resultsDir, { recursive: true });
+            }
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const filename = `voice-sim-${data.policyType}-${timestamp}.json`;
+            const filepath = path.join(resultsDir, filename);
+
+            // Format compatible with RL dashboard
+            const dashboardData = {
+              // Metadata
+              type: "voice-simulation",
+              simulationId: result.simulationId,
+              persona: {
+                id: result.persona.id,
+                name: result.persona.name,
+                path: result.persona.path,
+              },
+              policyType: result.policyType,
+              trainTimeMs: result.totalDurationMs,
+              numEpisodes: 1, // Single simulation = 1 episode
+
+              // Learning curve (single point for this episode)
+              learningCurve: [{
+                episode: 1,
+                trainReturn: result.totalReturn,
+              }],
+
+              // Episode data for Episode Explorer
+              episodes: [{
+                episodeId: result.simulationId,
+                persona: result.persona.id,
+                outcome: result.outcome,
+                totalReturn: result.totalReturn,
+                turns: result.totalTurns,
+                durationMs: result.totalDurationMs,
+                finalState: result.finalState,
+                pathCompleted: result.pathCompleted,
+                transcript: result.transcript.map((m) => ({
+                  role: m.role,
+                  text: m.text,
+                  timestamp: m.timestamp,
+                })),
+                decisions: result.decisions.map((d) => ({
+                  turn: d.turn,
+                  selectedAction: d.selectedAction,
+                  availableActions: d.availableActions,
+                  policyDecisionMs: d.policyDecisionMs,
+                })),
+              }],
+
+              // Final metrics
+              finalMetrics: {
+                avgReturn: result.totalReturn,
+                successRate: result.pathCompleted ? 1 : 0,
+                avgTurns: result.totalTurns,
+                avgDurationMs: result.totalDurationMs,
+              },
+
+              // Eval results (voice simulation as single eval)
+              evalResults: [{
+                episodeId: result.simulationId,
+                outcome: result.outcome,
+                return: result.totalReturn,
+              }],
+            };
+
+            fs.writeFileSync(filepath, JSON.stringify(dashboardData, null, 2));
+            console.log("[Simulation] Results saved to:", filename);
+          } catch (saveError) {
+            console.error("[Simulation] Failed to save results:", saveError);
+          }
+
           simulations.delete(simulationId);
         },
         onError: (error) => {
