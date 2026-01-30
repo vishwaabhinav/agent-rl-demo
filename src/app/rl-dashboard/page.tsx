@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { LearningDashboard } from "@/components/rl/learning-dashboard";
 import { EpisodeExplorer } from "@/components/rl/episode-explorer";
 import { PolicyInspector } from "@/components/rl/policy-inspector";
+import { TopNav } from "@/components/nav/TopNav";
 import type {
   LearningCurvePoint,
   AggregateMetrics,
@@ -85,6 +86,7 @@ export default function RLDashboardPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <TopNav />
       {/* Header */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4">

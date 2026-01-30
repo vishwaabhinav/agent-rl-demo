@@ -3,6 +3,7 @@
 import { LeftPane } from "@/components/layout/LeftPane";
 import { MiddlePane } from "@/components/layout/MiddlePane";
 import { CallReceiver } from "@/components/receiver/CallReceiver";
+import { TopNav } from "@/components/nav/TopNav";
 import { useVoiceSocket } from "@/hooks/useVoiceSocket";
 
 export default function Home() {
@@ -19,7 +20,9 @@ export default function Home() {
   } = useVoiceSocket();
 
   return (
-    <main className="h-screen flex overflow-hidden grid-bg">
+    <div className="h-screen flex flex-col overflow-hidden">
+      <TopNav />
+      <main className="flex-1 flex overflow-hidden grid-bg">
       {/* Left Pane - Control Panel (380px) */}
       <div className="w-[380px] flex-shrink-0">
         <LeftPane onInitiateCall={initiateCall} onEndCall={endCall} />
@@ -40,6 +43,7 @@ export default function Home() {
           isCapturing={isCapturing}
         />
       </div>
-    </main>
+      </main>
+    </div>
   );
 }

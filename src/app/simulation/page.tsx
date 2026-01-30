@@ -6,6 +6,7 @@ import { DualTranscript } from "@/components/simulation/DualTranscript";
 import { DecisionInspector } from "@/components/simulation/DecisionInspector";
 import { PathProgress } from "@/components/simulation/PathProgress";
 import { AudioPlayer } from "@/components/simulation/AudioPlayer";
+import { TopNav } from "@/components/nav/TopNav";
 import { useSimulationSocket } from "@/hooks/useSimulationSocket";
 import { useStereoAudioPlayback } from "@/hooks/useStereoAudioPlayback";
 
@@ -77,6 +78,7 @@ export default function SimulationPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <TopNav />
       {/* Header */}
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4">
