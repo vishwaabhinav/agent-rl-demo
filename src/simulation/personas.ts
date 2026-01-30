@@ -23,7 +23,7 @@ export const SUCCESSFUL_COLLECTION: VoicePersona = {
     "WRAPUP",
     "END_CALL",
   ],
-  voice: "nova",
+  voice: "shimmer",
   behavior: {
     interruptEagerness: "low",
     responseLength: "normal",
@@ -58,7 +58,7 @@ export const DISPUTER: VoicePersona = {
     "DISPUTE_FLOW",
     "END_CALL",
   ],
-  voice: "onyx",
+  voice: "ash",
   behavior: {
     interruptEagerness: "high",
     responseLength: "verbose",
@@ -113,7 +113,7 @@ export const DO_NOT_CALL: VoicePersona = {
     "DO_NOT_CALL",
     "END_CALL",
   ],
-  voice: "fable",
+  voice: "sage",
   behavior: {
     interruptEagerness: "high",
     responseLength: "terse",

@@ -320,7 +320,13 @@ async function handleAgentTurnComplete(
     session.agentSession?.close();
     session.borrowerSession?.close();
     (session as any)._checkCompletion?.();
+    return;
   }
+
+  // Agent finished speaking, now tell borrower to respond
+  // VAD doesn't work well on piped synthesized audio, so we explicitly trigger
+  console.log("[Orchestrator] Agent finished speaking, triggering borrower response");
+  session.borrowerSession?.commitAudioAndRespond();
 }
 
 /**
@@ -378,8 +384,12 @@ async function handleBorrowerTurnComplete(
 
     // Inject decision to agent
     session.agentSession?.injectSystemMessage(decision.injectedPrompt);
-    session.agentSession?.triggerResponse();
   }
+
+  // Agent needs to respond after borrower speaks
+  // VAD doesn't work well on piped synthesized audio, so we explicitly trigger
+  console.log("[Orchestrator] Borrower finished speaking, triggering agent response");
+  session.agentSession?.commitAudioAndRespond();
 }
 
 /**

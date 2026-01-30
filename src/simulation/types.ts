@@ -17,8 +17,8 @@ export interface VoicePersona {
   /** Explicit path through FSM states */
   path: FSMState[];
 
-  /** OpenAI voice selection */
-  voice: "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
+  /** OpenAI Realtime API voice selection */
+  voice: "alloy" | "ash" | "ballad" | "coral" | "echo" | "sage" | "shimmer" | "verse" | "marin" | "cedar";
 
   /** Behavioral parameters */
   behavior: {

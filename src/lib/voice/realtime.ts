@@ -49,7 +49,12 @@ export function createRealtimeSession(
             model: "gpt-4o-mini-transcribe",
             language: "en",
           },
-          turn_detection: config.turnDetection || {
+          turn_detection: config.turnDetection ? {
+            type: config.turnDetection.type,
+            eagerness: config.turnDetection.eagerness,
+            create_response: config.turnDetection.createResponse,
+            interrupt_response: config.turnDetection.interruptResponse,
+          } : {
             type: "semantic_vad",
             eagerness: "medium",
             create_response: true,
@@ -125,6 +130,15 @@ export function createRealtimeSession(
 
     triggerResponse: () => {
       if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "response.create" }));
+      }
+    },
+
+    commitAudioAndRespond: () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        // Commit the input audio buffer (like pressing "send")
+        ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+        // Then trigger a response
         ws.send(JSON.stringify({ type: "response.create" }));
       }
     },

@@ -79,6 +79,8 @@ export interface RealtimeSessionHandle {
   injectSystemMessage: (text: string) => void;
   /** Trigger a response from the model */
   triggerResponse: () => void;
+  /** Commit audio buffer and trigger response (for piped audio) */
+  commitAudioAndRespond: () => void;
   /** Close the session */
   close: () => void;
   /** Check if session is open */
