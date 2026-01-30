@@ -33,6 +33,12 @@ import {
   type OrchestratorCallbacks,
 } from "./src/simulation";
 
+// Import learners for loading saved state
+import { BanditLearner, QLearningLearner } from "./src/rl/learners";
+import type { Learner } from "./src/rl/types";
+import * as fs from "fs";
+import * as path from "path";
+
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -593,13 +599,49 @@ async function startServer() {
     // Simulation Start
     // ==========================================================================
 
-    socket.on("simulation:start", async (data: { personaId: string; policyType: string }) => {
+    socket.on("simulation:start", async (data: {
+      personaId: string;
+      policyType: string;
+      learnerFilename?: string;
+    }) => {
       console.log("[Simulation] Received simulation:start", data);
 
       const persona = getPersonaById(data.personaId);
       if (!persona) {
         socket.emit("simulation:error", { error: `Persona not found: ${data.personaId}` });
         return;
+      }
+
+      // Load learner if specified
+      let learner: Learner | undefined;
+      if (data.learnerFilename && data.policyType !== "none") {
+        try {
+          const resultsDir = path.join(process.cwd(), "rl-results");
+          const filePath = path.join(resultsDir, data.learnerFilename);
+
+          // Security check
+          if (!filePath.startsWith(resultsDir)) {
+            socket.emit("simulation:error", { error: "Invalid learner path" });
+            return;
+          }
+
+          if (fs.existsSync(filePath)) {
+            const content = fs.readFileSync(filePath, "utf-8");
+
+            if (data.policyType === "bandit") {
+              learner = new BanditLearner();
+              learner.load(content);
+              console.log("[Simulation] Loaded bandit learner from", data.learnerFilename);
+            } else if (data.policyType === "qlearning") {
+              learner = new QLearningLearner();
+              learner.load(content);
+              console.log("[Simulation] Loaded Q-learning learner from", data.learnerFilename);
+            }
+          }
+        } catch (error) {
+          console.error("[Simulation] Failed to load learner:", error);
+          // Continue without learner
+        }
       }
 
       const simulationId = `sim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -613,6 +655,7 @@ async function startServer() {
           path: persona.path,
         },
         policyType: data.policyType,
+        learnerLoaded: !!learner,
       });
 
       const config: SimulationConfig = {
@@ -672,12 +715,12 @@ async function startServer() {
       try {
         // Note: runSimulation returns a promise that resolves when simulation completes
         // For now we don't await it - it runs in background and emits events
-        runSimulation(config, callbacks).catch((err) => {
+        runSimulation(config, callbacks, learner).catch((err) => {
           console.error("[Simulation] Error:", err);
           io.to(simulationId).emit("simulation:error", { error: err.message });
         });
 
-        socket.emit("simulation:started", { simulationId });
+        socket.emit("simulation:started", { simulationId, learnerLoaded: !!learner });
       } catch (error) {
         console.error("[Simulation] Failed to start:", error);
         socket.emit("simulation:error", {
