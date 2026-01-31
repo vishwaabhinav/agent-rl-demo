@@ -2,6 +2,7 @@ import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import next from "next";
 import WebSocket from "ws";
+import * as db from "./src/lib/db";
 import type {
   CaseData,
   FSMState,
@@ -775,6 +776,74 @@ async function startServer() {
 
             fs.writeFileSync(filepath, JSON.stringify(dashboardData, null, 2));
             console.log("[Simulation] Results saved to:", filename);
+
+            // Also save to SQLite database
+            try {
+              const experimentId = `voice-sim-${result.simulationId}`;
+              const episodeId = `${experimentId}-ep-1`;
+
+              db.createExperiment({
+                id: experimentId,
+                type: "voice-simulation",
+                learnerType: result.policyType === "bandit" ? "bandit" : result.policyType === "qlearning" ? "qlearning" : undefined,
+                config: { personaId: result.persona.id, policyType: result.policyType },
+                finalMetrics: dashboardData.finalMetrics,
+                trainTimeMs: result.totalDurationMs,
+              });
+
+              db.createEpisode({
+                id: episodeId,
+                experimentId,
+                episodeNum: 1,
+                personaId: result.persona.id,
+                personaName: result.persona.name,
+                persona: result.persona,
+                outcome: result.outcome,
+                totalReturn: result.totalReturn,
+                turns: result.totalTurns,
+                durationMs: result.totalDurationMs,
+              });
+
+              // Save transcript as turns
+              const turns = result.transcript.map((m, idx) => {
+                const isAgent = m.role === "agent";
+                const prevMsg = idx > 0 ? result.transcript[idx - 1] : null;
+                return {
+                  episodeId,
+                  turnNum: Math.floor(idx / 2) + 1,
+                  agentText: isAgent ? m.text : prevMsg?.role === "agent" ? undefined : undefined,
+                  borrowerText: !isAgent ? m.text : undefined,
+                };
+              });
+
+              // Group by turn and save
+              const groupedTurns: Map<number, { agentText?: string; borrowerText?: string }> = new Map();
+              for (let i = 0; i < result.transcript.length; i++) {
+                const m = result.transcript[i];
+                const turnNum = Math.floor(i / 2) + 1;
+                if (!groupedTurns.has(turnNum)) {
+                  groupedTurns.set(turnNum, {});
+                }
+                const turn = groupedTurns.get(turnNum)!;
+                if (m.role === "agent") {
+                  turn.agentText = m.text;
+                } else {
+                  turn.borrowerText = m.text;
+                }
+              }
+
+              const turnData = Array.from(groupedTurns.entries()).map(([turnNum, data]) => ({
+                episodeId,
+                turnNum,
+                agentText: data.agentText,
+                borrowerText: data.borrowerText,
+              }));
+
+              db.createTurnsBatch(turnData);
+              console.log("[Simulation] Results saved to database");
+            } catch (dbError) {
+              console.error("[Simulation] Failed to save to database:", dbError);
+            }
           } catch (saveError) {
             console.error("[Simulation] Failed to save results:", saveError);
           }

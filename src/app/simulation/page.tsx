@@ -93,34 +93,10 @@ export default function SimulationPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <TopNav
-        title="Voice Simulation"
-        description="Voice-to-voice agent simulation with RL policy injection"
-        statusIndicator={
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-xs">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  isConnected ? "bg-emerald-500" : "bg-red-500"
-                }`}
-              />
-              <span className="text-zinc-500">
-                {isConnected ? "Connected" : "Disconnected"}
-              </span>
-            </div>
-            {status !== "idle" && (
-              <div
-                className={`px-2 py-1 rounded text-xs font-medium ${getStatusStyle(status)}`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </div>
-            )}
-          </div>
-        }
-      />
+      <TopNav />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-6">
+      <main className="px-6 py-6">
         {/* Error Display */}
         {error && (
           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">

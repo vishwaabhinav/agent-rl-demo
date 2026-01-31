@@ -2,8 +2,12 @@
  * Training Script
  *
  * Main entry point for running RL experiments.
- * Run with: npx ts-node src/rl/train.ts [options]
+ * Run with: npx tsx src/rl/train.ts [options]
  */
+
+// Load environment variables from .env.local
+import { config } from "dotenv";
+config({ path: ".env.local" });
 
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
@@ -16,7 +20,7 @@ import {
   createTestCase,
   createEnvironment,
 } from "./environment/gym-wrapper";
-import { MockLLMClient } from "./simulator/borrower";
+import { OpenAILLMClient } from "./simulator/openai-client";
 import { PRESET_PERSONAS, getPresetPersonaNames } from "./simulator/personas";
 import { BanditLearner, DEFAULT_BANDIT_CONFIG } from "./learners/bandit";
 import { QLearner, DEFAULT_QLEARNING_CONFIG } from "./learners/qlearning";
@@ -28,6 +32,7 @@ import {
   TrainingConfig,
   TrainingResult,
   saveResults,
+  saveResultsToDb,
 } from "./evaluation/runner";
 import { computeMetrics, formatMetrics, compareMetrics } from "./evaluation/metrics";
 
@@ -62,15 +67,22 @@ function ensureResultsDir(): void {
 function saveExperimentResults(
   name: string,
   result: TrainingResult,
-  learnerState: string
+  learnerState: string,
+  config?: TrainingConfig
 ): string {
   ensureResultsDir();
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const filename = `${name}-${timestamp}.json`;
+  const experimentId = `${name}-${timestamp}`;
+  const filename = `${experimentId}.json`;
   const filepath = join(RESULTS_DIR, filename);
 
+  // Save to JSON file (for backwards compatibility)
   const data = saveResults(result, learnerState);
   writeFileSync(filepath, data);
+
+  // Save to SQLite database (with full episode transcripts)
+  const learnerType = name === "bandit" ? "bandit" : name === "qlearning" ? "qlearning" : "baseline";
+  saveResultsToDb(experimentId, learnerType, result, learnerState, config);
 
   console.log(`Results saved to: ${filepath}`);
   return filepath;
@@ -147,7 +159,7 @@ async function runBanditExperiment(
   console.log(`Training time: ${(result.trainTimeMs / 1000).toFixed(1)}s`);
 
   // Save results
-  saveExperimentResults("bandit", result, bandit.save());
+  saveExperimentResults("bandit", result, bandit.save(), config);
 
   return result;
 }
@@ -178,7 +190,7 @@ async function runQLearningExperiment(
   console.log(`Q-table size: ${qlearner.getTableSize().states} states, ${qlearner.getTableSize().pairs} pairs`);
 
   // Save results
-  saveExperimentResults("qlearning", result, qlearner.save());
+  saveExperimentResults("qlearning", result, qlearner.save(), config);
 
   return result;
 }
@@ -235,10 +247,13 @@ async function runAllExperiments(quick: boolean = false): Promise<void> {
   console.log("RL FOR BOUNDED AGENTS - FULL EXPERIMENT SUITE");
   console.log("=".repeat(60));
 
-  // Create environment
+  // Create environment with appropriate LLM clients
   const caseData = createTestCase();
-  const mockLLM = new MockLLMClient();
-  const env = createEnvironment(mockLLM, caseData);
+  const borrowerLLM = new OpenAILLMClient({ model: "gpt-4o-mini", temperature: 0.8 });
+  const agentLLM = new OpenAILLMClient({ model: "gpt-4o-mini", temperature: 0.7 });
+
+  console.log(`Using OpenAI LLM for borrower and agent`);
+  const env = createEnvironment(borrowerLLM, caseData, undefined, agentLLM);
 
   const config = quick ? QUICK_TRAINING_CONFIG : DEFAULT_TRAINING_CONFIG;
 
@@ -271,7 +286,7 @@ function printUsage(): void {
   console.log(`
 RL Training Script for Bounded Agents
 
-Usage: npx ts-node src/rl/train.ts [command] [options]
+Usage: npx tsx src/rl/train.ts [command] [options]
 
 Commands:
   all           Run all experiments (default)
@@ -286,9 +301,8 @@ Options:
   --help        Show this help message
 
 Examples:
-  npx ts-node src/rl/train.ts all --quick
-  npx ts-node src/rl/train.ts bandit --episodes 200
-  npx ts-node src/rl/train.ts compare
+  npx tsx src/rl/train.ts bandit --quick              # Fast with real LLM
+  npx tsx src/rl/train.ts bandit --episodes 200       # Real LLM with 200 episodes
 `);
 }
 
@@ -314,10 +328,13 @@ async function main(): Promise<void> {
   // Get command
   const command = args.find((a) => !a.startsWith("--")) || "all";
 
-  // Create environment
+  // Create environment with appropriate LLM clients
   const caseData = createTestCase();
-  const mockLLM = new MockLLMClient();
-  const env = createEnvironment(mockLLM, caseData);
+  const borrowerLLM = new OpenAILLMClient({ model: "gpt-4o-mini", temperature: 0.8 });
+  const agentLLM = new OpenAILLMClient({ model: "gpt-4o-mini", temperature: 0.7 });
+
+  console.log(`Using OpenAI LLM for borrower and agent`);
+  const env = createEnvironment(borrowerLLM, caseData, undefined, agentLLM);
 
   // Build config
   const baseConfig = quick ? QUICK_TRAINING_CONFIG : DEFAULT_TRAINING_CONFIG;

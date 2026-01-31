@@ -5,193 +5,306 @@ import { LearningDashboard } from "@/components/rl/learning-dashboard";
 import { EpisodeExplorer } from "@/components/rl/episode-explorer";
 import { PolicyInspector } from "@/components/rl/policy-inspector";
 import { TopNav } from "@/components/nav/TopNav";
-import type {
-  LearningCurvePoint,
-  AggregateMetrics,
-  Episode,
-  PolicyData,
-  EvalResult,
-} from "@/components/rl/types";
+import { LineChart, Film, Target } from "lucide-react";
+import type { ReactNode } from "react";
 
 type TabId = "dashboard" | "episodes" | "policy";
 
 interface TabConfig {
   id: TabId;
   label: string;
-  icon: string;
+  icon: ReactNode;
 }
 
 const TABS: TabConfig[] = [
-  { id: "dashboard", label: "Learning Dashboard", icon: "📈" },
-  { id: "episodes", label: "Episode Explorer", icon: "🎬" },
-  { id: "policy", label: "Policy Inspector", icon: "🎯" },
+  { id: "dashboard", label: "Learning", icon: <LineChart className="w-3.5 h-3.5" strokeWidth={1.5} /> },
+  { id: "episodes", label: "Episodes", icon: <Film className="w-3.5 h-3.5" strokeWidth={1.5} /> },
+  { id: "policy", label: "Policy", icon: <Target className="w-3.5 h-3.5" strokeWidth={1.5} /> },
 ];
 
-interface ExperimentData {
-  learningCurve: LearningCurvePoint[];
-  evalResults: EvalResult[];
-  finalMetrics: AggregateMetrics;
-  trainTimeMs: number;
-  numEpisodes: number;
-  learnerType: "bandit" | "qlearning";
-  episodes?: Episode[];
-  policy?: PolicyData;
+interface Experiment {
+  id: string;
+  type: "training" | "voice-simulation";
+  learnerType: string | null;
+  createdAt: string;
+  trainTimeMs: number | null;
+  totalEpisodes: number;
+  avgReturn: number;
+  successRate: number;
+}
+
+interface ExperimentDetail {
+  id: string;
+  type: "training" | "voice-simulation";
+  learnerType: string | null;
+  createdAt: string;
+  trainTimeMs: number | null;
+  config: object | null;
+  finalMetrics: {
+    avgReturn: number;
+    stdReturn?: number;
+    successRate: number;
+    partialSuccessRate?: number;
+    avgLength?: number;
+    hangupRate?: number;
+    escalationRate?: number;
+  } | null;
+  learnerState: string | null;
+  learningCurve: Array<{
+    episode: number;
+    trainReturn: number | null;
+    evalReturn: number | null;
+    evalSuccessRate: number | null;
+  }>;
+  episodes: Array<{
+    id: string;
+    episodeNum: number;
+    personaId: string | null;
+    personaName: string | null;
+    outcome: string | null;
+    totalReturn: number | null;
+    turns: number | null;
+  }>;
 }
 
 export default function RLDashboardPage() {
-  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
-  const [experimentData, setExperimentData] = useState<ExperimentData | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>("episodes");
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [selectedExperimentId, setSelectedExperimentId] = useState<string>("");
+  const [experimentDetail, setExperimentDetail] = useState<ExperimentDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string>("");
-  const [availableFiles, setAvailableFiles] = useState<string[]>([]);
 
-  // Load available result files
+  // Load experiments list from database
   useEffect(() => {
-    async function fetchFiles() {
+    async function fetchExperiments() {
       try {
-        const res = await fetch("/api/rl-experiments");
+        const res = await fetch("/api/experiments?action=list");
         const data = await res.json();
-        setAvailableFiles(data.files || []);
+        setExperiments(data.experiments || []);
+        // Auto-select first experiment
+        if (data.experiments?.length > 0 && !selectedExperimentId) {
+          setSelectedExperimentId(data.experiments[0].id);
+        }
       } catch (error) {
         console.error("Failed to fetch experiments:", error);
-        setAvailableFiles([]);
+        setExperiments([]);
       }
     }
-    fetchFiles();
+    fetchExperiments();
   }, []);
 
-  // Load experiment data when file selected
+  // Load experiment details when selected
   useEffect(() => {
-    if (!selectedFile) {
-      setExperimentData(null);
+    if (!selectedExperimentId) {
+      setExperimentDetail(null);
       return;
     }
 
     async function loadExperiment() {
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/rl-experiments?file=${encodeURIComponent(selectedFile)}`);
+        const res = await fetch(`/api/experiments?action=get&id=${encodeURIComponent(selectedExperimentId)}`);
         if (!res.ok) throw new Error("Failed to load");
         const data = await res.json();
-        setExperimentData(data);
+        setExperimentDetail(data);
       } catch (error) {
         console.error("Failed to load experiment:", error);
-        setExperimentData(null);
+        setExperimentDetail(null);
       } finally {
         setIsLoading(false);
       }
     }
     loadExperiment();
-  }, [selectedFile]);
+  }, [selectedExperimentId]);
 
-  function renderStatusIndicator(): React.ReactNode {
-    if (isLoading) {
-      return (
-        <>
-          <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-          <span className="text-zinc-400">Loading...</span>
-        </>
-      );
+  // Transform learning curve for LearningDashboard (convert null to undefined)
+  const learningCurve = experimentDetail?.learningCurve.map((p) => ({
+    episode: p.episode,
+    trainReturn: p.trainReturn ?? 0,
+    evalReturn: p.evalReturn ?? undefined,
+    evalSuccessRate: p.evalSuccessRate ?? undefined,
+  }));
+
+  // Parse learner state for Policy Inspector
+  const parsePolicyData = () => {
+    if (!experimentDetail?.learnerState) return undefined;
+    try {
+      const state = JSON.parse(experimentDetail.learnerState);
+      const learnerType = experimentDetail.learnerType as "bandit" | "qlearning";
+
+      if (learnerType === "bandit" && state.weights) {
+        // Convert bandit weights to qValues format for PolicyInspector
+        // Create synthetic entries per FSM state with average weight as "value"
+        const fsmStates = ["OPENING", "DISCLOSURE", "IDENTITY_VERIFICATION", "NEGOTIATION", "PAYMENT_SETUP", "WRAPUP"];
+        const qValues = fsmStates.map((fsmState) => {
+          const actionValues: Record<string, number> = {};
+          for (const [action, weights] of Object.entries(state.weights)) {
+            const weightArray = weights as number[];
+            // Use average of weights as action value
+            actionValues[action] = weightArray.reduce((a, b) => a + b, 0) / weightArray.length;
+          }
+          return {
+            stateKey: `fsm:${fsmState}`,
+            fsmState,
+            actionValues,
+          };
+        });
+
+        // Build greedy policy
+        const greedyPolicy: Record<string, string> = {};
+        for (const entry of qValues) {
+          let bestAction = "";
+          let bestValue = -Infinity;
+          for (const [action, value] of Object.entries(entry.actionValues)) {
+            if (value > bestValue) {
+              bestValue = value;
+              bestAction = action;
+            }
+          }
+          greedyPolicy[entry.stateKey] = bestAction;
+        }
+
+        return {
+          type: "bandit" as const,
+          qValues,
+          greedyPolicy,
+          episodesTrained: state.episodesTrained || experimentDetail.episodes.length,
+        };
+      }
+
+      if (learnerType === "qlearning" && state.qTable) {
+        // Convert Q-table to qValues format
+        const qValues = Object.entries(state.qTable).map(([stateKey, actions]) => ({
+          stateKey,
+          fsmState: stateKey.split("|")[0]?.replace("fsm:", "") || "UNKNOWN",
+          actionValues: actions as Record<string, number>,
+        }));
+
+        const greedyPolicy: Record<string, string> = {};
+        for (const entry of qValues) {
+          let bestAction = "";
+          let bestValue = -Infinity;
+          for (const [action, value] of Object.entries(entry.actionValues)) {
+            if (value > bestValue) {
+              bestValue = value;
+              bestAction = action;
+            }
+          }
+          greedyPolicy[entry.stateKey] = bestAction;
+        }
+
+        return {
+          type: "qlearning" as const,
+          qValues,
+          greedyPolicy,
+          episodesTrained: state.episodesTrained || experimentDetail.episodes.length,
+        };
+      }
+
+      return undefined;
+    } catch (e) {
+      console.error("Failed to parse learner state:", e);
+      return undefined;
     }
-    if (experimentData) {
-      return (
-        <>
-          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span className="text-zinc-400">Ready</span>
-        </>
-      );
-    }
-    return (
-      <>
-        <div className="w-2 h-2 rounded-full bg-zinc-600" />
-        <span className="text-zinc-500">No data</span>
-      </>
-    );
-  }
+  };
+
+  const policyData = parsePolicyData();
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <TopNav
-        title="RL Training Dashboard"
-        description="Debt Collection Agent Learning Analytics"
-        statusIndicator={
-          <div className="flex items-center gap-2 text-sm">
-            {renderStatusIndicator()}
-          </div>
-        }
-        actions={
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-zinc-500">Experiment:</label>
-            <select
-              value={selectedFile}
-              onChange={(e) => setSelectedFile(e.target.value)}
-              className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            >
-              <option value="">Select experiment...</option>
-              {availableFiles.map((file) => (
-                <option key={file} value={file}>
-                  {file.replace(".json", "")}
-                </option>
-              ))}
-            </select>
-          </div>
-        }
-      />
+      <TopNav />
 
-      {/* Tab Navigation */}
-      <div className="border-b border-zinc-800 bg-zinc-900/30">
-        <div className="max-w-7xl mx-auto px-6">
-          <nav className="flex gap-1 -mb-px">
+      {/* Page toolbar with tabs and controls */}
+      <div className="bg-[#080b10]">
+        <div className="px-6 flex items-center justify-between h-10">
+          {/* Tabs */}
+          <div className="flex items-center gap-1">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-zinc-800 text-zinc-100 border-t border-x border-zinc-700"
-                    : "text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800/50"
-                }`}
+                className={`
+                  relative px-3 h-10 flex items-center gap-2 text-xs font-medium transition-colors
+                  ${activeTab === tab.id
+                    ? "text-[#00d4ff]"
+                    : "text-[#5a6a7a] hover:text-[#8a9aaa]"
+                  }
+                `}
               >
-                <span>{tab.icon}</span>
+                <span className={activeTab === tab.id ? "opacity-100" : "opacity-60"}>
+                  {tab.icon}
+                </span>
                 <span>{tab.label}</span>
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-0 left-2 right-2 h-px bg-[#00d4ff]" />
+                )}
               </button>
             ))}
-          </nav>
+          </div>
+
+          {/* Controls */}
+          <div className="flex items-center gap-3">
+            {isLoading && (
+              <div className="flex items-center gap-2 text-xs text-amber-400">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Loading...
+              </div>
+            )}
+            <select
+              value={selectedExperimentId}
+              onChange={(e) => setSelectedExperimentId(e.target.value)}
+              className="bg-[#0a0e14] border border-[#1e3a4f]/60 rounded px-2 py-1 text-xs text-[#8a9aaa] focus:outline-none focus:border-[#00d4ff]/50 min-w-[200px]"
+            >
+              <option value="">Select experiment...</option>
+              {experiments.map((exp) => (
+                <option key={exp.id} value={exp.id}>
+                  {exp.type === "voice-simulation" ? "🎤 " : "📊 "}
+                  {exp.id.slice(0, 30)}... ({exp.totalEpisodes} eps)
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="px-6 py-6">
         {activeTab === "dashboard" && (
           <LearningDashboard
-            learningCurve={experimentData?.learningCurve}
-            evalResults={experimentData?.evalResults}
-            finalMetrics={experimentData?.finalMetrics}
-            trainTimeMs={experimentData?.trainTimeMs}
-            learnerType={experimentData?.learnerType}
+            learningCurve={learningCurve}
+            evalResults={[]}
+            finalMetrics={experimentDetail?.finalMetrics ? {
+              numEpisodes: experimentDetail.episodes.length,
+              avgReturn: experimentDetail.finalMetrics.avgReturn,
+              stdReturn: experimentDetail.finalMetrics.stdReturn ?? 0,
+              successRate: experimentDetail.finalMetrics.successRate,
+              partialSuccessRate: experimentDetail.finalMetrics.partialSuccessRate ?? 0,
+              avgLength: experimentDetail.finalMetrics.avgLength ?? 0,
+              hangupRate: experimentDetail.finalMetrics.hangupRate ?? 0,
+              escalationRate: experimentDetail.finalMetrics.escalationRate ?? 0,
+            } : undefined}
+            trainTimeMs={experimentDetail?.trainTimeMs ?? undefined}
+            learnerType={experimentDetail?.learnerType as "bandit" | "qlearning" | undefined}
           />
         )}
 
         {activeTab === "episodes" && (
-          <EpisodeExplorer episodes={experimentData?.episodes} />
+          <EpisodeExplorer
+            experimentId={selectedExperimentId}
+            episodes={experimentDetail?.episodes}
+          />
         )}
 
         {activeTab === "policy" && (
-          <PolicyInspector policyData={experimentData?.policy} />
+          <PolicyInspector policyData={policyData} />
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-800 bg-zinc-900/30 mt-auto">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between text-xs text-zinc-500">
-            <span>
-              RL Environment for Debt Collection Agents
-            </span>
-            <span>
-              Built with Q-Learning & Contextual Bandits
-            </span>
-          </div>
+      <footer className="bg-[#080b10] mt-auto">
+        <div className="px-6 py-3 flex items-center justify-between text-[10px] text-[#5a6a7a]">
+          <span>RL Environment for Debt Collection Agents</span>
+          <span>Q-Learning & Contextual Bandits</span>
         </div>
       </footer>
     </div>

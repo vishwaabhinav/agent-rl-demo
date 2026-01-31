@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import { DebtCollectionEnv } from "../environment/gym-wrapper";
 import { computeMetrics, createLearningCurve } from "./metrics";
+import * as db from "../../lib/db";
 
 /**
  * Run a single episode.
@@ -284,6 +285,77 @@ export function saveResults(
     numEpisodes: results.trainEpisodes.length,
     learnerState,
   }, null, 2);
+}
+
+/**
+ * Save training results to SQLite database.
+ */
+export function saveResultsToDb(
+  experimentId: string,
+  learnerType: "bandit" | "qlearning" | "baseline",
+  results: TrainingResult,
+  learnerState: string,
+  config?: TrainingConfig
+): void {
+  // Create experiment
+  db.createExperiment({
+    id: experimentId,
+    type: "training",
+    learnerType,
+    config: config,
+    finalMetrics: results.finalMetrics,
+    learnerState,
+    trainTimeMs: results.trainTimeMs,
+  });
+
+  // Save learning curve
+  for (const point of results.learningCurve) {
+    db.addLearningCurvePoint({
+      experimentId,
+      episodeNum: point.episode,
+      trainReturn: point.trainReturn,
+      evalReturn: point.evalReturn,
+      evalSuccessRate: point.evalSuccessRate,
+    });
+  }
+
+  // Save episodes with transcripts
+  for (let i = 0; i < results.trainEpisodes.length; i++) {
+    const ep = results.trainEpisodes[i];
+    const episodeId = `${experimentId}-ep-${i + 1}`;
+
+    db.createEpisode({
+      id: episodeId,
+      experimentId,
+      episodeNum: i + 1,
+      personaId: ep.persona?.name?.toLowerCase().replace(/\s+/g, "-"),
+      personaName: ep.persona?.name,
+      persona: ep.persona,
+      outcome: ep.outcome,
+      totalReturn: ep.return_,
+      turns: ep.length,
+    });
+
+    // Save turns/transitions
+    if (ep.trajectory?.transitions) {
+      const turns = ep.trajectory.transitions.map((t, turnIdx) => ({
+        episodeId,
+        turnNum: turnIdx + 1,
+        fsmState: t.state.fsmState,
+        action: t.action,
+        agentText: t.info?.agentUtterance,
+        borrowerText: t.info?.borrowerResponse,
+        reward: t.reward,
+        rewardBreakdown: t.info?.rewardBreakdown,
+        state: t.state,
+        nextState: t.nextState,
+        detectedSignals: t.info?.detectedSignals,
+      }));
+      db.createTurnsBatch(turns);
+    }
+  }
+
+  console.log(`Saved ${results.trainEpisodes.length} episodes to database (experiment: ${experimentId})`);
 }
 
 /**

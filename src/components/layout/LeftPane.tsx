@@ -12,36 +12,23 @@ interface LeftPaneProps {
 
 export function LeftPane({ onInitiateCall, onEndCall }: LeftPaneProps) {
   return (
-    <div className="h-full flex flex-col bg-sidebar border-r border-sidebar-border">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-sidebar-border">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-primary pulse-active" />
-          <h1 className="text-sm font-bold tracking-wide text-foreground">
-            RECOVERY AGENT
-          </h1>
-        </div>
-        <p className="text-[10px] text-muted-foreground mt-0.5 tracking-wider">
-          COLLECTION HARNESS v0.1
-        </p>
-      </div>
-
+    <div className="h-full flex flex-col bg-[#0a0e14]">
       {/* Tabs */}
       <Tabs defaultValue="control" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="w-full rounded-none border-b border-sidebar-border bg-transparent h-auto p-0 flex-shrink-0">
+        <TabsList className="w-full rounded-none bg-[#080b10] h-8 p-0 flex-shrink-0 flex">
           <TabsTrigger
             value="control"
-            className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary py-2.5 text-xs uppercase tracking-wider font-semibold"
+            className="h-8 px-3 rounded-none data-[state=active]:bg-[#0d1219] data-[state=active]:text-[#00d4ff] text-[10px] uppercase tracking-wider font-medium text-[#5a6a7a] transition-colors"
           >
-            <Settings className="w-3.5 h-3.5 mr-1.5" />
+            <Settings className="w-3 h-3 mr-1.5" />
             Control
           </TabsTrigger>
           <TabsTrigger
             value="fsm"
-            className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary py-2.5 text-xs uppercase tracking-wider font-semibold"
+            className="h-8 px-3 rounded-none data-[state=active]:bg-[#0d1219] data-[state=active]:text-[#00d4ff] text-[10px] uppercase tracking-wider font-medium text-[#5a6a7a] transition-colors"
           >
-            <GitBranch className="w-3.5 h-3.5 mr-1.5" />
-            State Machine
+            <GitBranch className="w-3 h-3 mr-1.5" />
+            FSM
           </TabsTrigger>
         </TabsList>
 
