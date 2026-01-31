@@ -5,8 +5,9 @@
  * Integrates FSM, borrower simulator, and reward calculator.
  */
 
-import type { CaseData, FSMState, UserSignal, Intent } from "../../lib/types";
+import type { CaseData, FSMState, UserSignal, Intent, PolicyConfig } from "../../lib/types";
 import { FSMEngine, STATE_ALLOWED_INTENTS } from "../../lib/engine/fsm";
+import { buildAgentInstructions, buildIntentInjection } from "../../lib/voice/prompts";
 import type {
   RLState,
   RLAction,
@@ -32,6 +33,10 @@ import {
 } from "./reward";
 import { BorrowerSimulator, LLMClient } from "../simulator/borrower";
 import { samplePersona } from "../simulator/personas";
+
+// Unified agent (optional integration)
+import { UnifiedAgent } from "../../lib/agent";
+import type { AgentConfig } from "../../lib/agent/types";
 
 /**
  * Agent utterance generator interface.
@@ -219,15 +224,28 @@ export class TemplateUtteranceGenerator implements AgentUtteranceGenerator {
 
 /**
  * LLM-based utterance generator.
- * Uses an LLM to generate more natural varied responses.
+ * Uses the same prompts as voice agent for consistency.
  */
 export class LLMUtteranceGenerator implements AgentUtteranceGenerator {
   private llmClient: LLMClient;
   private caseData: CaseData;
+  private systemPrompt: string;
+  private policyConfig: PolicyConfig;
 
   constructor(llmClient: LLMClient, caseData: CaseData) {
     this.llmClient = llmClient;
     this.caseData = caseData;
+    this.policyConfig = {
+      jurisdiction: caseData.jurisdiction,
+      callWindowStart: "08:00",
+      callWindowEnd: "21:00",
+      maxAttemptsPerDay: 3,
+      maxAttemptsTotal: 10,
+      prohibitedPhrases: [],
+      requireRecordingConsent: true,
+    };
+    // Use same prompt as voice agent
+    this.systemPrompt = buildAgentInstructions(caseData, this.policyConfig);
   }
 
   async generate(
@@ -235,29 +253,26 @@ export class LLMUtteranceGenerator implements AgentUtteranceGenerator {
     state: FSMState,
     context: AgentContext
   ): Promise<string> {
-    const systemPrompt = `You are a debt collection agent speaking to a debtor.
-Be professional, empathetic, and compliant. Keep responses brief (1-2 sentences).
-Current state: ${state}
-Intent to express: ${intent}
-Debtor name: ${this.caseData.debtorName}
-Creditor: ${this.caseData.creditorName}
-Amount: $${this.caseData.amountDue.toFixed(2)}`;
-
-    const recentHistory = context.conversationHistory.slice(-4);
-    let userPrompt = "Generate the agent's next response.\n\n";
+    // Build conversation context
+    const recentHistory = context.conversationHistory.slice(-6);
+    let userPrompt = "";
 
     if (recentHistory.length > 0) {
-      userPrompt += "Recent conversation:\n";
+      userPrompt += "Conversation so far:\n";
       for (const turn of recentHistory) {
-        const speaker = turn.role === "agent" ? "Agent" : "Borrower";
+        const speaker = turn.role === "agent" ? "You" : "Borrower";
         userPrompt += `${speaker}: ${turn.text}\n`;
       }
+      userPrompt += "\n";
     }
 
-    userPrompt += `\nIntent: ${intent}\nAgent says:`;
+    // Add current state context
+    userPrompt += `Current call stage: ${state}\n`;
+    userPrompt += buildIntentInjection(intent) + "\n\n";
+    userPrompt += "Respond with your next line (1-2 sentences, natural speech):";
 
     try {
-      return await this.llmClient.complete(userPrompt, systemPrompt);
+      return await this.llmClient.complete(userPrompt, this.systemPrompt);
     } catch {
       // Fallback to template
       const fallback = new TemplateUtteranceGenerator(this.caseData);
