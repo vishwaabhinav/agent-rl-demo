@@ -27,6 +27,10 @@ import {
 } from "./borrower-fsm";
 import { buildBorrowerInstructions, buildBorrowerStatePrompt } from "./borrower-prompts";
 
+// Unified agent (for future migration)
+import { UnifiedAgent } from "../lib/agent";
+import type { AgentConfig } from "../lib/agent/types";
+
 // Demo case for simulation
 const DEMO_CASE: CaseData = {
   id: "sim-case-001",
