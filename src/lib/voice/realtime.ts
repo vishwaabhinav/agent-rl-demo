@@ -340,21 +340,43 @@ export function createConnectedRealtimeSessions(
     onBorrowerAudio?: (base64: string) => void;
     onError?: (error: Error, side: "agent" | "borrower") => void;
     onClose?: (side: "agent" | "borrower") => void;
-  }
-): { agent: RealtimeSessionHandle; borrower: RealtimeSessionHandle } {
+  },
+  floorConfig?: Partial<FloorControllerConfig>
+): {
+  agent: RealtimeSessionHandle;
+  borrower: RealtimeSessionHandle;
+  floor: FloorController;
+} {
+  // Create floor controller for turn-taking
+  const floor = createFloorController({
+    mode: "simulation",
+    allowBargeIn: false,
+    floorTransferDelayMs: 200,
+    ...floorConfig,
+  });
+
   let agentSession: RealtimeSessionHandle;
   let borrowerSession: RealtimeSessionHandle;
 
   // Create agent session
   agentSession = createRealtimeSession(agentConfig, {
     onReady: () => console.log("[Simulation] Agent session ready"),
+    onAgentSpeechStart: () => {
+      floor.startSpeaking("agent");
+    },
     onAgentTranscript: (text, isFinal) => {
       callbacks.onAgentTranscript?.(text, isFinal);
     },
     onAudioDelta: (audio) => {
+      // Check floor control before sending audio
+      if (!floor.canSpeak("agent")) return;
       // Pipe agent audio to borrower input
       callbacks.onAgentAudio?.(audio);
       borrowerSession?.sendAudio(audio);
+    },
+    onAgentSpeechEnd: () => {
+      floor.stopSpeaking("agent");
+      floor.transferFloor();
     },
     onError: (err) => callbacks.onError?.(err, "agent"),
     onClose: () => callbacks.onClose?.("agent"),
@@ -363,18 +385,27 @@ export function createConnectedRealtimeSessions(
   // Create borrower session
   borrowerSession = createRealtimeSession(borrowerConfig, {
     onReady: () => console.log("[Simulation] Borrower session ready"),
+    onAgentSpeechStart: () => {
+      floor.startSpeaking("borrower");
+    },
     onAgentTranscript: (text, isFinal) => {
       // Note: borrower's "agent" output is the borrower speaking
       callbacks.onBorrowerTranscript?.(text, isFinal);
     },
     onAudioDelta: (audio) => {
+      // Check floor control before sending audio
+      if (!floor.canSpeak("borrower")) return;
       // Pipe borrower audio to agent input
       callbacks.onBorrowerAudio?.(audio);
       agentSession?.sendAudio(audio);
+    },
+    onAgentSpeechEnd: () => {
+      floor.stopSpeaking("borrower");
+      floor.transferFloor();
     },
     onError: (err) => callbacks.onError?.(err, "borrower"),
     onClose: () => callbacks.onClose?.("borrower"),
   });
 
-  return { agent: agentSession, borrower: borrowerSession };
+  return { agent: agentSession, borrower: borrowerSession, floor };
 }
