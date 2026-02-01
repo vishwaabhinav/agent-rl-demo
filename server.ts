@@ -788,6 +788,12 @@ async function startServer() {
             audio: base64Audio,
           });
         },
+        onSpeechStart: (side) => {
+          io.to(simulationId).emit("simulation:speechStart", { side });
+        },
+        onSpeechEnd: (side) => {
+          io.to(simulationId).emit("simulation:speechEnd", { side });
+        },
         onStateChange: (agentState, borrowerPathIndex) => {
           io.to(simulationId).emit("simulation:stateChange", {
             agentState,

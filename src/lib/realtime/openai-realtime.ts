@@ -190,7 +190,7 @@ export class OpenAIRealtimeClient extends EventEmitter {
       default:
         // Log unknown events for debugging
         if (type && !type.startsWith("rate_limits")) {
-          console.log("[Realtime] Event:", type);
+          // console.log("[Realtime] Event:", type);
         }
     }
   }

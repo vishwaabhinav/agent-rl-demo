@@ -247,7 +247,7 @@ function handleRealtimeEvent(
     default:
       // Log all events for debugging
       if (!type?.startsWith("rate_limits")) {
-        console.log(`[Realtime] Event: ${type}`);
+        // console.log(`[Realtime] Event: ${type}`);
       }
   }
 }

@@ -64,6 +64,8 @@ const DEFAULT_POLICY_CONFIG = {
 export interface OrchestratorCallbacks {
   onTranscript?: (side: "agent" | "borrower", text: string, isFinal: boolean) => void;
   onAudio?: (side: "agent" | "borrower", base64Audio: string) => void;
+  onSpeechStart?: (side: "agent" | "borrower") => void;
+  onSpeechEnd?: (side: "agent" | "borrower") => void;
   onStateChange?: (agentState: FSMState, borrowerPathIndex: number) => void;
   onDecision?: (decision: DecisionRecord) => void;
   onComplete?: (result: SimulationResult) => void;
@@ -210,6 +212,11 @@ function createAgentSession(
       console.log("[Orchestrator] Agent session ready");
       onReady();
     },
+    onAgentSpeechStart: () => {
+      console.log("[Orchestrator] Agent started speaking");
+      turnState.currentSpeaker = "agent";
+      callbacks.onSpeechStart?.("agent");
+    },
     onAgentTranscript: (text, isFinal) => {
       if (isFinal) {
         session.agentTranscript = text;
@@ -231,6 +238,7 @@ function createAgentSession(
     onAgentSpeechEnd: () => {
       console.log("[Orchestrator] Agent finished speaking, buffered chunks:", turnState.agentAudioBuffer.length);
       turnState.currentSpeaker = "none";
+      callbacks.onSpeechEnd?.("agent");
       // Agent finished speaking, send buffered audio to borrower and trigger response
       handleAgentTurnComplete(session, callbacks, turnState);
     },
@@ -271,6 +279,11 @@ function createBorrowerSession(
       session.borrowerSession?.injectSystemMessage(statePrompt);
       onReady();
     },
+    onAgentSpeechStart: () => {
+      console.log("[Orchestrator] Borrower started speaking");
+      turnState.currentSpeaker = "borrower";
+      callbacks.onSpeechStart?.("borrower");
+    },
     onAgentTranscript: (text, isFinal) => {
       // Note: borrower's "agent" output is the borrower speaking
       if (isFinal) {
@@ -293,6 +306,7 @@ function createBorrowerSession(
     onAgentSpeechEnd: () => {
       console.log("[Orchestrator] Borrower finished speaking, buffered chunks:", turnState.borrowerAudioBuffer.length);
       turnState.currentSpeaker = "none";
+      callbacks.onSpeechEnd?.("borrower");
       // Borrower finished speaking, send buffered audio to agent and trigger response
       handleBorrowerTurnComplete(session, callbacks, turnState);
     },

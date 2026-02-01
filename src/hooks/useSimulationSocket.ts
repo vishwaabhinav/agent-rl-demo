@@ -45,6 +45,8 @@ export interface SimulationState {
 export interface AudioCallbacks {
   onAgentAudio?: (base64Audio: string) => void;
   onBorrowerAudio?: (base64Audio: string) => void;
+  onAgentSpeechStart?: () => void;
+  onBorrowerSpeechStart?: () => void;
 }
 
 export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
@@ -150,6 +152,15 @@ export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
         audioCallbacks?.onAgentAudio?.(data.audio);
       } else {
         audioCallbacks?.onBorrowerAudio?.(data.audio);
+      }
+    });
+
+    socket.on("simulation:speechStart", (data: { side: "agent" | "borrower" }) => {
+      console.log("[SimSocket] Speech start:", data.side);
+      if (data.side === "agent") {
+        audioCallbacks?.onAgentSpeechStart?.();
+      } else {
+        audioCallbacks?.onBorrowerSpeechStart?.();
       }
     });
 

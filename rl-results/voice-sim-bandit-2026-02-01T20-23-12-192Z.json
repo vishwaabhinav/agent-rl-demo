@@ -1,0 +1,397 @@
+{
+  "type": "voice-simulation",
+  "simulationId": "sim-1769977274510-wbvt09",
+  "persona": {
+    "id": "successful-collection",
+    "name": "Cooperative Payer",
+    "path": [
+      "OPENING",
+      "DISCLOSURE",
+      "CONSENT_RECORDING",
+      "DEBT_CONTEXT",
+      "NEGOTIATION",
+      "PAYMENT_SETUP",
+      "WRAPUP",
+      "END_CALL"
+    ]
+  },
+  "policyType": "bandit",
+  "trainTimeMs": 116360,
+  "numEpisodes": 1,
+  "learningCurve": [
+    {
+      "episode": 1,
+      "trainReturn": 0
+    }
+  ],
+  "episodes": [
+    {
+      "episodeId": "sim-1769977274510-wbvt09",
+      "persona": "successful-collection",
+      "outcome": "CONVERSATION_ENDED",
+      "totalReturn": 0,
+      "turns": 16,
+      "durationMs": 116360,
+      "finalState": "END_CALL",
+      "pathCompleted": false,
+      "transcript": [
+        {
+          "role": "agent",
+          "text": "Hello, am I speaking with John Smith?",
+          "timestamp": "2026-02-01T20:21:16.905Z"
+        },
+        {
+          "role": "user",
+          "text": "Yes, this is John Smith speaking.",
+          "timestamp": "2026-02-01T20:21:19.872Z"
+        },
+        {
+          "role": "agent",
+          "text": "Thank you, John. This is Sarah Mitchell from First National Bank. This is an attempt to collect a debt. Before we go further, can I have your consent to record this call?",
+          "timestamp": "2026-02-01T20:21:23.580Z"
+        },
+        {
+          "role": "user",
+          "text": "Okay, I understand.",
+          "timestamp": "2026-02-01T20:21:26.731Z"
+        },
+        {
+          "role": "agent",
+          "text": "Thank you, I appreciate that. You have an outstanding balance of $2,450 that’s 45 days past due. Let’s discuss some payment options. We can set up a payment plan if that would help.",
+          "timestamp": "2026-02-01T20:21:30.448Z"
+        },
+        {
+          "role": "user",
+          "text": "Sure, I’m willing to discuss payment options. What kind of plan are you thinking?",
+          "timestamp": "2026-02-01T20:21:34.486Z"
+        },
+        {
+          "role": "agent",
+          "text": "We can offer a three-month installment plan, which would break it down into smaller monthly payments. Or, we can look at a customized payment date that fits your schedule. What would be comfortable for you?",
+          "timestamp": "2026-02-01T20:21:38.319Z"
+        },
+        {
+          "role": "user",
+          "text": "A three-month installment plan sounds reasonable. Let’s go with that.",
+          "timestamp": "2026-02-01T20:21:41.793Z"
+        },
+        {
+          "role": "agent",
+          "text": "Great. For the three-month installment plan, that would be about $816.67 per month. Would that work for you, or would you like to adjust the first payment date?",
+          "timestamp": "2026-02-01T20:21:45.242Z"
+        },
+        {
+          "role": "user",
+          "text": "That amount seems manageable. I’m okay with starting the first payment on the regular due date.",
+          "timestamp": "2026-02-01T20:21:49.183Z"
+        },
+        {
+          "role": "agent",
+          "text": "That’s good to hear, John. Let’s set the first payment for the upcoming due date, and the following two payments will be monthly. Now, let’s pick the payment method—do you prefer a bank account or a debit card for these installments?",
+          "timestamp": "2026-02-01T20:21:53.208Z"
+        },
+        {
+          "role": "user",
+          "text": "I’d prefer to use my bank account for the installments. That should work fine.",
+          "timestamp": "2026-02-01T20:21:57.420Z"
+        },
+        {
+          "role": "agent",
+          "text": "Understood. We’ll set up the installments using your bank account. I’ll just need the account and routing number to finalize the plan.",
+          "timestamp": "2026-02-01T20:22:00.494Z"
+        },
+        {
+          "role": "user",
+          "text": "Alright, I’ve got that information handy. Let me give you the account and routing numbers now.",
+          "timestamp": "2026-02-01T20:22:04.101Z"
+        },
+        {
+          "role": "agent",
+          "text": "Thank you, John. Go ahead and share the routing number first, and then the account number when you're ready.",
+          "timestamp": "2026-02-01T20:22:06.409Z"
+        },
+        {
+          "role": "user",
+          "text": "Alright, the routing number is 021-000021, and the account number is 3456-789012.",
+          "timestamp": "2026-02-01T20:22:11.390Z"
+        },
+        {
+          "role": "agent",
+          "text": "Got it. So we have the routing number as 02100021, and the account number as 3456789012. We’ll set the first installment for the upcoming due date, and the next two will follow monthly. I’ll confirm everything now.",
+          "timestamp": "2026-02-01T20:22:17.189Z"
+        },
+        {
+          "role": "user",
+          "text": "Sounds good, I’m ready to confirm everything.",
+          "timestamp": "2026-02-01T20:22:21.415Z"
+        },
+        {
+          "role": "agent",
+          "text": "Perfect. Your total balance of $2,450 will be split into three monthly payments of about $816.67 each. The first installment will be on the next due date. Everything is now set, and I’ll provide a confirmation reference number for you shortly.",
+          "timestamp": "2026-02-01T20:22:26.988Z"
+        },
+        {
+          "role": "user",
+          "text": "I appreciate that. Thanks for helping me set this up.",
+          "timestamp": "2026-02-01T20:22:31.629Z"
+        },
+        {
+          "role": "agent",
+          "text": "You're welcome, John. I'm glad we could find a plan that works. Let me give you the confirmation reference number now: it’s FNB4721-JS. You’ll receive a confirmation by mail as well.",
+          "timestamp": "2026-02-01T20:22:35.662Z"
+        },
+        {
+          "role": "user",
+          "text": "Got it, FNB-4721-JS. I’ll keep an eye out for the confirmation by mail. Thank you.",
+          "timestamp": "2026-02-01T20:22:40.233Z"
+        },
+        {
+          "role": "agent",
+          "text": "Excellent. We’ve got everything set up. Your three-month installment plan is confirmed, and you’re all set to go. If you have any more questions later, feel free to reach out. Thanks for taking care of this today.",
+          "timestamp": "2026-02-01T20:22:44.414Z"
+        },
+        {
+          "role": "user",
+          "text": "Thank you, I really appreciate your help. I don’t have any more questions right now. You have a good day.",
+          "timestamp": "2026-02-01T20:22:48.773Z"
+        },
+        {
+          "role": "agent",
+          "text": "You’re very welcome, John. You have a great day too. Take care.",
+          "timestamp": "2026-02-01T20:22:50.910Z"
+        },
+        {
+          "role": "user",
+          "text": "Take care, bye for now.",
+          "timestamp": "2026-02-01T20:22:54.510Z"
+        },
+        {
+          "role": "agent",
+          "text": "Goodbye for now, John. Take care.",
+          "timestamp": "2026-02-01T20:22:56.572Z"
+        },
+        {
+          "role": "user",
+          "text": "Goodbye, and thanks again.",
+          "timestamp": "2026-02-01T20:22:59.318Z"
+        },
+        {
+          "role": "agent",
+          "text": "You're welcome, John. Goodbye, and take care.",
+          "timestamp": "2026-02-01T20:23:01.070Z"
+        },
+        {
+          "role": "user",
+          "text": "Goodbye, take care.",
+          "timestamp": "2026-02-01T20:23:03.733Z"
+        },
+        {
+          "role": "agent",
+          "text": "Goodbye, John. Take care, and remember, if you need anything in the future, we’re here to help.",
+          "timestamp": "2026-02-01T20:23:06.008Z"
+        },
+        {
+          "role": "user",
+          "text": "Thanks, I’ll keep that in mind. Take care.",
+          "timestamp": "2026-02-01T20:23:09.281Z"
+        },
+        {
+          "role": "agent",
+          "text": "Take care, and have a great day, John. We're all set.",
+          "timestamp": "2026-02-01T20:23:11.156Z"
+        }
+      ],
+      "decisions": [
+        {
+          "turn": 1,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 2,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 1
+        },
+        {
+          "turn": 3,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 4,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 5,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 6,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 7,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 8,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 9,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 10,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 11,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 12,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 13,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 14,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 15,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 16,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        }
+      ]
+    }
+  ],
+  "finalMetrics": {
+    "avgReturn": 0,
+    "successRate": 0,
+    "avgTurns": 16,
+    "avgDurationMs": 116360
+  },
+  "evalResults": [
+    {
+      "episodeId": "sim-1769977274510-wbvt09",
+      "outcome": "CONVERSATION_ENDED",
+      "return": 0
+    }
+  ]
+}

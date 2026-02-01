@@ -199,7 +199,16 @@ export function useStereoAudioPlayback({
     };
   }, [sampleRate]);
 
-  // Clear audio queue and stop current playback
+  // Clear specific queue (for turn-taking - clear other party when one starts speaking)
+  const clearAgentQueue = useCallback(() => {
+    agentQueueRef.current = [];
+  }, []);
+
+  const clearBorrowerQueue = useCallback(() => {
+    borrowerQueueRef.current = [];
+  }, []);
+
+  // Clear all audio queues and stop current playback
   const clearQueue = useCallback(() => {
     agentQueueRef.current = [];
     borrowerQueueRef.current = [];
@@ -244,6 +253,8 @@ export function useStereoAudioPlayback({
     queueAgentAudio,
     queueBorrowerAudio,
     clearQueue,
+    clearAgentQueue,
+    clearBorrowerQueue,
     stop,
     // Volume controls
     agentVolume,
