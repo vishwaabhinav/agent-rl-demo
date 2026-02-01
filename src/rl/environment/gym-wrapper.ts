@@ -5,9 +5,10 @@
  * Integrates FSM, borrower simulator, and reward calculator.
  */
 
-import type { CaseData, FSMState, UserSignal, Intent, PolicyConfig } from "../../lib/types";
+import type { CaseData, FSMState, UserSignal, Intent, PolicyConfig, Message } from "../../lib/types";
 import { FSMEngine, STATE_ALLOWED_INTENTS } from "../../lib/engine/fsm";
 import { buildAgentInstructions, buildIntentInjection } from "../../lib/voice/prompts";
+import { classifyStateWithLLM } from "../../lib/voice";
 import type {
   RLState,
   RLAction,
@@ -37,6 +38,28 @@ import { samplePersona } from "../simulator/personas";
 // Unified agent (optional integration)
 import { UnifiedAgent } from "../../lib/agent";
 import type { AgentConfig } from "../../lib/agent/types";
+
+/**
+ * Map LLM-detected state transitions to UserSignals.
+ * This aligns RL training with production signal detection.
+ */
+function stateTransitionToSignal(
+  fromState: FSMState,
+  toState: FSMState
+): UserSignal | null {
+  // Special states indicate detected signals
+  if (toState === "DISPUTE_FLOW") return "DISPUTE";
+  if (toState === "DO_NOT_CALL") return "STOP_CONTACT";
+  if (toState === "WRONG_PARTY_FLOW") return "WRONG_PARTY";
+  if (toState === "ESCALATE_HUMAN") return "HOSTILITY"; // Escalation often from hostility
+  if (toState === "CALLBACK_SCHEDULED") return "CALLBACK_REQUEST";
+
+  // AGREEMENT: transition from NEGOTIATION to PAYMENT_SETUP means user agreed
+  if (fromState === "NEGOTIATION" && toState === "PAYMENT_SETUP") return "AGREEMENT";
+
+  // No signal for normal progression
+  return null;
+}
 
 /**
  * Agent utterance generator interface.
@@ -399,32 +422,47 @@ export class DebtCollectionEnv {
     const borrowerResponse = await this.borrowerSim.respond(agentUtterance);
     this.conversationHistory.push({ role: "borrower", text: borrowerResponse.text });
 
-    // Track signals
-    const detectedSignals: UserSignal[] = [];
-    if (borrowerResponse.detectedSignal) {
-      detectedSignals.push(borrowerResponse.detectedSignal);
-      this.signalHistory.push(borrowerResponse.detectedSignal);
-    }
+    // Use LLM-based state classification (same as production)
+    const messages: Message[] = this.conversationHistory.map((m, i) => ({
+      id: String(i),
+      role: m.role === "agent" ? "agent" as const : "user" as const,
+      text: m.text,
+      timestamp: new Date(),
+    }));
 
-    // Check for forced transitions from signals
-    const forcedState = this.fsm.checkForcedTransition(detectedSignals);
+    const llmResult = await classifyStateWithLLM(
+      fsmStateBefore,
+      borrowerResponse.text,
+      messages
+    );
+
+    // Determine state transition based on LLM classification
     let fsmStateAfter = fsmStateBefore;
     let wasForced = false;
     let transitionReason = "No transition";
 
-    if (forcedState) {
-      this.fsm.forceTransition(forcedState, `Signal: ${detectedSignals.join(", ")}`);
-      fsmStateAfter = forcedState;
-      wasForced = true;
-      transitionReason = `Forced by signal: ${detectedSignals.join(", ")}`;
-    } else if (borrowerResponse.shouldHangup) {
+    // Extract signal from state transition
+    const detectedSignals: UserSignal[] = [];
+    const inferredSignal = stateTransitionToSignal(fsmStateBefore, llmResult.nextState);
+    if (inferredSignal) {
+      detectedSignals.push(inferredSignal);
+      this.signalHistory.push(inferredSignal);
+    }
+
+    if (borrowerResponse.shouldHangup) {
       // Borrower hung up - force to END_CALL
       this.fsm.forceTransition("END_CALL", "Borrower hangup");
       fsmStateAfter = "END_CALL";
       wasForced = true;
       transitionReason = "Borrower hangup";
+    } else if (llmResult.nextState !== fsmStateBefore && llmResult.confidence >= 0.5) {
+      // LLM detected a state transition
+      this.fsm.forceTransition(llmResult.nextState, `LLM: ${llmResult.reasoning}`);
+      fsmStateAfter = llmResult.nextState;
+      wasForced = true;
+      transitionReason = `LLM (${(llmResult.confidence * 100).toFixed(0)}%): ${llmResult.reasoning}`;
     } else if (this.shouldAdvanceState(action, detectedSignals)) {
-      // Standard transition
+      // Standard transition based on action
       const transition = this.fsm.transition(detectedSignals);
       fsmStateAfter = transition.newState;
       transitionReason = transition.reason;
@@ -581,7 +619,6 @@ export class DebtCollectionEnv {
     const advancingActions: Record<string, RLAction[]> = {
       OPENING: ["PROCEED"],
       DISCLOSURE: ["IDENTIFY_SELF", "PROCEED"],
-      IDENTITY_VERIFICATION: ["CONFIRM_IDENTITY"],
       CONSENT_RECORDING: ["PROCEED"],
       DEBT_CONTEXT: ["PROCEED"],
       NEGOTIATION: ["PROCEED", "REQUEST_CALLBACK"],
