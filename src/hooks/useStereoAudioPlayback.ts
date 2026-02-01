@@ -20,13 +20,16 @@ export function useStereoAudioPlayback({
   const nextPlayTimeRef = useRef(0);
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
+  // Track current speaker for turn-taking (prevents overlap)
+  const currentSpeakerRef = useRef<"agent" | "borrower" | null>(null);
+
   // Volume controls (0-1)
   const agentGainRef = useRef<GainNode | null>(null);
   const borrowerGainRef = useRef<GainNode | null>(null);
   const [agentVolume, setAgentVolume] = useState(1);
   const [borrowerVolume, setBorrowerVolume] = useState(1);
 
-  // Initialize audio context with stereo panning setup
+  // Initialize audio context
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext({ sampleRate });
@@ -54,7 +57,13 @@ export function useStereoAudioPlayback({
     }
   }, [borrowerVolume]);
 
-  // Queue agent audio (left channel)
+  // Set current speaker (called when speech starts)
+  const setCurrentSpeaker = useCallback((speaker: "agent" | "borrower") => {
+    console.log(`[Audio] Speaker changed to: ${speaker}`);
+    currentSpeakerRef.current = speaker;
+  }, []);
+
+  // Queue agent audio
   const queueAgentAudio = useCallback(
     (base64Audio: string) => {
       if (!enabled) return;
@@ -73,13 +82,13 @@ export function useStereoAudioPlayback({
           processQueue();
         }
       } catch (error) {
-        console.error("[StereoAudio] Error queueing agent audio:", error);
+        console.error("[Audio] Error queueing agent audio:", error);
       }
     },
     [enabled, initAudioContext]
   );
 
-  // Queue borrower audio (right channel)
+  // Queue borrower audio
   const queueBorrowerAudio = useCallback(
     (base64Audio: string) => {
       if (!enabled) return;
@@ -98,14 +107,13 @@ export function useStereoAudioPlayback({
           processQueue();
         }
       } catch (error) {
-        console.error("[StereoAudio] Error queueing borrower audio:", error);
+        console.error("[Audio] Error queueing borrower audio:", error);
       }
     },
     [enabled, initAudioContext]
   );
 
-  // Process queued audio - SERIAL playback (one speaker at a time, no overlap)
-  // Agent queue is processed first, then borrower queue
+  // Process queued audio - plays ONLY current speaker's audio (turn-taking)
   const processQueue = useCallback(() => {
     const audioContext = audioContextRef.current;
     if (!audioContext) {
@@ -114,11 +122,28 @@ export function useStereoAudioPlayback({
       return;
     }
 
-    // Check if we have any audio to play - process ONE queue at a time (serial, not parallel)
-    const hasAgent = agentQueueRef.current.length > 0;
-    const hasBorrower = borrowerQueueRef.current.length > 0;
+    // Determine which queue to process based on current speaker
+    const speaker = currentSpeakerRef.current;
+    let audioData: Float32Array | null = null;
+    let gainNode: GainNode | null = null;
 
-    if (!hasAgent && !hasBorrower) {
+    if (speaker === "agent" && agentQueueRef.current.length > 0) {
+      audioData = agentQueueRef.current.shift()!;
+      gainNode = agentGainRef.current;
+    } else if (speaker === "borrower" && borrowerQueueRef.current.length > 0) {
+      audioData = borrowerQueueRef.current.shift()!;
+      gainNode = borrowerGainRef.current;
+    } else if (agentQueueRef.current.length > 0) {
+      // Fallback: if no current speaker set, process agent first
+      audioData = agentQueueRef.current.shift()!;
+      gainNode = agentGainRef.current;
+    } else if (borrowerQueueRef.current.length > 0) {
+      // Then borrower
+      audioData = borrowerQueueRef.current.shift()!;
+      gainNode = borrowerGainRef.current;
+    }
+
+    if (!audioData || audioData.length === 0) {
       isProcessingRef.current = false;
       setIsPlaying(false);
       return;
@@ -127,25 +152,7 @@ export function useStereoAudioPlayback({
     isProcessingRef.current = true;
     setIsPlaying(true);
 
-    // Serial playback: prioritize agent queue, then borrower
-    // This prevents overlap - one speaker finishes before the next starts
-    let audioData: Float32Array;
-    let gainNode: GainNode | null;
-
-    if (hasAgent) {
-      audioData = agentQueueRef.current.shift()!;
-      gainNode = agentGainRef.current;
-    } else {
-      audioData = borrowerQueueRef.current.shift()!;
-      gainNode = borrowerGainRef.current;
-    }
-
-    if (audioData.length === 0) {
-      processQueue();
-      return;
-    }
-
-    // Create mono audio buffer (single channel)
+    // Create mono audio buffer
     const audioBuffer = audioContext.createBuffer(
       1, // mono
       audioData.length,
@@ -160,10 +167,9 @@ export function useStereoAudioPlayback({
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
 
-    // Route through the appropriate gain node (for volume control)
+    // Route through the appropriate gain node
     if (gainNode) {
       source.connect(gainNode);
-      gainNode.connect(audioContext.destination);
     } else {
       source.connect(audioContext.destination);
     }
@@ -187,7 +193,7 @@ export function useStereoAudioPlayback({
     };
   }, [sampleRate]);
 
-  // Clear specific queue (for turn-taking - clear other party when one starts speaking)
+  // Clear specific queue
   const clearAgentQueue = useCallback(() => {
     agentQueueRef.current = [];
   }, []);
@@ -202,6 +208,7 @@ export function useStereoAudioPlayback({
     borrowerQueueRef.current = [];
     nextPlayTimeRef.current = 0;
     isProcessingRef.current = false;
+    currentSpeakerRef.current = null;
     setIsPlaying(false);
 
     if (activeSourceRef.current) {
@@ -240,6 +247,7 @@ export function useStereoAudioPlayback({
     isPlaying,
     queueAgentAudio,
     queueBorrowerAudio,
+    setCurrentSpeaker,
     clearQueue,
     clearAgentQueue,
     clearBorrowerQueue,

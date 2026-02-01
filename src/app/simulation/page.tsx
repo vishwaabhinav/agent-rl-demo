@@ -11,29 +11,28 @@ import { useSimulationSocket } from "@/hooks/useSimulationSocket";
 import { useStereoAudioPlayback } from "@/hooks/useStereoAudioPlayback";
 
 export default function SimulationPage() {
-  // Stereo audio playback with turn-taking
+  // Audio playback with turn-taking
   const {
     isPlaying: isAudioPlaying,
     queueAgentAudio,
     queueBorrowerAudio,
+    setCurrentSpeaker,
     agentVolume,
     setAgentVolume,
     borrowerVolume,
     setBorrowerVolume,
     clearQueue: clearAudioQueue,
-    clearAgentQueue,
-    clearBorrowerQueue,
   } = useStereoAudioPlayback({ enabled: true });
 
-  // Audio callbacks for socket
-  // Note: Don't clear queues on speech start - the orchestrator enforces strict turns,
-  // so audio arrives sequentially. Clearing cuts off the current speaker prematurely.
+  // Audio callbacks for socket - sets current speaker on speech start for turn-taking
   const audioCallbacks = useMemo(
     () => ({
       onAgentAudio: queueAgentAudio,
       onBorrowerAudio: queueBorrowerAudio,
+      onAgentSpeechStart: () => setCurrentSpeaker("agent"),
+      onBorrowerSpeechStart: () => setCurrentSpeaker("borrower"),
     }),
-    [queueAgentAudio, queueBorrowerAudio]
+    [queueAgentAudio, queueBorrowerAudio, setCurrentSpeaker]
   );
 
   // Simulation socket connection
