@@ -13,10 +13,10 @@ const STATE_GUIDANCE: Record<FSMState, string> = {
 - State any information obtained will be used for that purpose
 - If required, mention the call may be recorded`,
 
-  IDENTITY_VERIFICATION: `Verify the debtor's identity:
+  IDENTITY_VERIFICATION: `(Optional) Verify the debtor's identity if needed:
 - Ask for verification information (last 4 of SSN, DOB, or address)
-- If they cannot verify, you cannot proceed with debt discussion
-- Be patient if they need time to retrieve information`,
+- This step can be skipped - identity verification is not required before discussing the debt
+- If verification fails, you may still proceed with the call`,
 
   CONSENT_RECORDING: `Obtain consent for call recording if required:
 - Clearly ask if they consent to the call being recorded
