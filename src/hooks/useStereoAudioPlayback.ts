@@ -18,7 +18,8 @@ export function useStereoAudioPlayback({
   const borrowerQueueRef = useRef<Float32Array[]>([]);
   const isProcessingRef = useRef(false);
   const nextPlayTimeRef = useRef(0);
-  const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  // Track ALL active sources (Web Audio can have multiple scheduled)
+  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
   // Track current speaker for turn-taking (prevents overlap)
   const currentSpeakerRef = useRef<"agent" | "borrower" | null>(null);
@@ -70,15 +71,15 @@ export function useStereoAudioPlayback({
     console.log(`[Audio] Speaker changed: ${previousSpeaker} → ${speaker}`);
     currentSpeakerRef.current = speaker;
 
-    // Stop any currently playing audio
-    if (activeSourceRef.current) {
+    // Stop ALL currently playing/scheduled audio sources
+    for (const source of activeSourcesRef.current) {
       try {
-        activeSourceRef.current.stop();
+        source.stop();
       } catch {
         // Source may already be stopped
       }
-      activeSourceRef.current = null;
     }
+    activeSourcesRef.current.clear();
 
     // Clear the old speaker's queue
     if (previousSpeaker === "agent") {
@@ -211,8 +212,8 @@ export function useStereoAudioPlayback({
       source.connect(audioContext.destination);
     }
 
-    // Track active source for interruption
-    activeSourceRef.current = source;
+    // Track this source (for cleanup when speaker changes)
+    activeSourcesRef.current.add(source);
 
     // Schedule playback
     const currentTime = audioContext.currentTime;
@@ -223,9 +224,7 @@ export function useStereoAudioPlayback({
 
     // Process next chunk when this one ends
     source.onended = () => {
-      if (activeSourceRef.current === source) {
-        activeSourceRef.current = null;
-      }
+      activeSourcesRef.current.delete(source);
       processQueue();
     };
   }, [sampleRate]);
@@ -248,14 +247,15 @@ export function useStereoAudioPlayback({
     currentSpeakerRef.current = null;
     setIsPlaying(false);
 
-    if (activeSourceRef.current) {
+    // Stop all active sources
+    for (const source of activeSourcesRef.current) {
       try {
-        activeSourceRef.current.stop();
+        source.stop();
       } catch {
         // Source may already be stopped
       }
-      activeSourceRef.current = null;
     }
+    activeSourcesRef.current.clear();
 
     if (audioContextRef.current) {
       nextPlayTimeRef.current = audioContextRef.current.currentTime;
