@@ -137,3 +137,15 @@ export const SAMPLE_METRICS: AggregateMetrics = {
   hangupRate: 0.15,
   escalationRate: 0.05,
 };
+
+// Baseline metrics for heuristic-only policy (no RL training)
+export const BASELINE_METRICS: AggregateMetrics = {
+  numEpisodes: 0,
+  avgReturn: -0.8,
+  stdReturn: 0.7,
+  successRate: 0.05,
+  partialSuccessRate: 0.15,
+  avgLength: 6.0,
+  hangupRate: 0.65,
+  escalationRate: 0.10,
+};

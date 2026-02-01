@@ -28,6 +28,7 @@ export async function runEpisode(
   persona?: PersonaConfig
 ): Promise<EpisodeMetrics> {
   // Reset environment
+  console.log(`  [Episode] Starting episode with persona: ${persona?.name || 'default'}`);
   let state = env.reset(persona);
   let totalReturn = 0;
   let steps = 0;
@@ -36,8 +37,10 @@ export async function runEpisode(
   while (!env.isDone()) {
     const allowedActions = env.getAllowedActions();
     const action = learner.selectAction(state, allowedActions);
+    console.log(`    [Step ${steps + 1}] FSM: ${env.getFSMState()} | Action: ${action}`);
 
     const result = await env.step(action);
+    console.log(`    [Step ${steps + 1}] Reward: ${result.reward.toFixed(2)} | Done: ${result.done}`);
 
     // Update learner if training
     if (train) {
@@ -54,6 +57,7 @@ export async function runEpisode(
     state = result.state;
     steps++;
   }
+  console.log(`  [Episode] Completed: ${steps} steps, return: ${totalReturn.toFixed(2)}`);
 
   // Get trajectory
   const trajectory = env.getTrajectory();
@@ -135,7 +139,9 @@ export async function trainAndEvaluate(
   const trainEpisodes: EpisodeMetrics[] = [];
   const evalResults: Array<{ episode: number; metrics: AggregateMetrics }> = [];
 
+  console.log(`Starting training: ${config.numEpisodes} episodes`);
   for (let ep = 1; ep <= config.numEpisodes; ep++) {
+    console.log(`\n[Training] Episode ${ep}/${config.numEpisodes}`);
     // Sample persona for this episode
     const persona = config.personas
       ? config.personas[Math.floor(Math.random() * config.personas.length)]
@@ -144,6 +150,7 @@ export async function trainAndEvaluate(
     // Run training episode
     const episode = await runEpisode(env, learner, true, persona);
     trainEpisodes.push(episode);
+    console.log(`[Training] Episode ${ep} done: return=${episode.return_.toFixed(2)}, outcome=${episode.outcome}`);
 
     // Log progress
     if (ep % config.logInterval === 0) {
@@ -180,13 +187,21 @@ export async function trainAndEvaluate(
     }
   }
 
-  // Final evaluation
-  const { metrics: finalMetrics } = await runEvaluation(
-    env,
-    learner,
-    config.evalEpisodes * 2,
-    config.personas
-  );
+  // Final evaluation (skip if evalEpisodes is 0)
+  let finalMetrics: AggregateMetrics;
+  if (config.evalEpisodes > 0) {
+    const evalResult = await runEvaluation(
+      env,
+      learner,
+      config.evalEpisodes * 2,
+      config.personas
+    );
+    finalMetrics = evalResult.metrics;
+  } else {
+    // Use training episode metrics as final metrics
+    finalMetrics = computeMetrics(trainEpisodes);
+    console.log("Skipping final evaluation (--no-eval or evalEpisodes=0)");
+  }
 
   // Create learning curve
   const learningCurve = createLearningCurve(
@@ -268,23 +283,6 @@ export async function runExperiments(
   }
 
   return results;
-}
-
-/**
- * Save training results to JSON.
- */
-export function saveResults(
-  results: TrainingResult,
-  learnerState: string
-): string {
-  return JSON.stringify({
-    learningCurve: results.learningCurve,
-    evalResults: results.evalResults,
-    finalMetrics: results.finalMetrics,
-    trainTimeMs: results.trainTimeMs,
-    numEpisodes: results.trainEpisodes.length,
-    learnerState,
-  }, null, 2);
 }
 
 /**

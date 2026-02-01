@@ -102,3 +102,82 @@ export function buildStateTransitionPrompt(targetState: string): string {
 export function buildGreetingTrigger(): string {
   return "[SYSTEM: The call has been answered. Deliver your opening greeting to verify you're speaking with the right person.]";
 }
+
+/**
+ * State context for stateless NLG - describes what the agent is doing in each state
+ */
+export const STATE_CONTEXT: Record<string, string> = {
+  OPENING: "You are greeting the borrower and confirming their identity",
+  DISCLOSURE: "You are identifying yourself and your company",
+  IDENTITY_VERIFICATION: "You are verifying the borrower's identity",
+  CONSENT_RECORDING: "You are asking for consent to record the call",
+  DEBT_CONTEXT: "You are explaining the debt details",
+  NEGOTIATION: "You are discussing payment options",
+  PAYMENT_SETUP: "You are setting up the payment arrangement",
+  WRAPUP: "You are wrapping up the call",
+  CALLBACK_SCHEDULED: "You have scheduled a callback",
+  DISPUTE_FLOW: "The borrower is disputing the debt",
+  WRONG_PARTY_FLOW: "This is the wrong person",
+  DO_NOT_CALL: "The borrower requested no further contact",
+  ESCALATE_HUMAN: "The borrower wants to speak with a supervisor",
+  END_CALL: "The call is ending",
+};
+
+/**
+ * Action guidance for stateless NLG - describes what the action should accomplish
+ */
+export const ACTION_GUIDANCE: Record<string, string> = {
+  // Universal actions
+  PROCEED: "Move the conversation forward naturally",
+  ASK_CLARIFY: "Ask for clarification about what they said",
+  HANDLE_PUSHBACK: "Acknowledge their concern and address it empathetically",
+  EMPATHIZE: "Show understanding for their situation",
+
+  // State-specific actions
+  IDENTIFY_SELF: "Introduce yourself and your company, state this is a debt collection call",
+  ASK_VERIFICATION: "Ask for identity verification (last 4 SSN or date of birth)",
+  CONFIRM_IDENTITY: "Confirm their identity has been verified",
+  OFFER_PLAN: "Propose a payment plan option",
+  COUNTER_OFFER: "Offer an alternative payment arrangement",
+  REQUEST_CALLBACK: "Offer to call back at a better time",
+  CONFIRM_PLAN: "Confirm the agreed payment arrangement",
+  SEND_PAYMENT_LINK: "Let them know you will send a payment link",
+  SUMMARIZE: "Briefly summarize what was discussed or agreed",
+
+  // Special flow actions
+  ACKNOWLEDGE_DISPUTE: "Acknowledge their dispute and explain verification process",
+  ACKNOWLEDGE_DNC: "Acknowledge their do-not-call request politely",
+  APOLOGIZE: "Apologize for the confusion",
+  ESCALATE: "Let them know you will transfer to a supervisor",
+};
+
+/**
+ * Build a stateless NLG prompt - no call flow knowledge, only current state + action
+ */
+export function buildNLGPrompt(
+  state: string,
+  action: string,
+  caseData: { debtorName: string; creditorName: string; amountDue: number },
+  recentHistory: string
+): string {
+  const stateContext = STATE_CONTEXT[state] || `You are in the ${state} stage`;
+  const actionGuidance = ACTION_GUIDANCE[action] || `Perform the ${action} action`;
+
+  return `Generate the agent's next line.
+
+Current situation: ${stateContext}
+Your task: ${actionGuidance}
+
+Debtor: ${caseData.debtorName} | Creditor: ${caseData.creditorName} | Amount: $${caseData.amountDue.toLocaleString()}
+
+${recentHistory}
+
+Rules:
+- 1-2 sentences, natural speech
+- Stay focused on your current task only
+- Do NOT ask for SSN/DOB unless action is ASK_VERIFICATION
+- Do NOT discuss payment plans unless action is OFFER_PLAN or COUNTER_OFFER
+- Do NOT mention other stages of the call
+
+Agent says:`;
+}

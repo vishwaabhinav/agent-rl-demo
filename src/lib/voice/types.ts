@@ -4,6 +4,7 @@
 
 import type WebSocket from "ws";
 import type { CaseData, FSMState, Message, PolicyConfig, TurnTrace } from "../types";
+import type { Learner } from "../../rl/types";
 
 export type CallStatus = "idle" | "ringing" | "connecting" | "active" | "ended" | "declined";
 
@@ -30,6 +31,8 @@ export interface VoiceSession extends BaseVoiceSession {
   status: CallStatus;
   realtimeWs: WebSocket | null;
   callStartTime: number | null;
+  /** Optional RL learner for policy-guided responses */
+  learner: Learner | null;
 }
 
 /**

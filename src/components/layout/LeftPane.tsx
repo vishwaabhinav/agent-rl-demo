@@ -6,7 +6,7 @@ import { FSMDiagram } from "@/components/fsm/FSMDiagram";
 import { Settings, GitBranch } from "lucide-react";
 
 interface LeftPaneProps {
-  onInitiateCall?: () => void;
+  onInitiateCall?: (policyId?: string) => void;
   onEndCall?: () => void;
 }
 

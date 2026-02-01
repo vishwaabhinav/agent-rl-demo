@@ -35,8 +35,9 @@ import {
 } from "./src/simulation";
 
 // Import learners for loading saved state
-import { BanditLearner, QLearner } from "./src/rl/learners";
-import type { Learner } from "./src/rl/types";
+import { BanditLearner, QLearner, createLearnerFromState, createFreshLearner } from "./src/rl/learners";
+import type { Learner, RLAction } from "./src/rl/types";
+import { extractState, type SessionContext } from "./src/rl/environment/state-extractor";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -73,9 +74,13 @@ function createRealtimeConnection(
 
   ws.on("open", () => {
     console.log(`[Realtime] Connected for session ${session.id}`);
+    console.log(`[Realtime] RL learner present: ${!!session.learner}`);
 
     // Configure the session with debt collection agent persona
     const instructions = buildAgentInstructions(session.caseData, session.policyConfig);
+
+    // When RL learner is present, disable auto-response so we can inject policy decisions
+    const createResponse = !session.learner;
 
     ws.send(
       JSON.stringify({
@@ -93,7 +98,7 @@ function createRealtimeConnection(
           turn_detection: {
             type: "semantic_vad",
             eagerness: "medium",
-            create_response: true,
+            create_response: createResponse,
             interrupt_response: true,
           },
         },
@@ -165,6 +170,48 @@ function handleRealtimeEvent(
 
     case "input_audio_buffer.speech_stopped":
       emit("voice:userSpeaking", { speaking: false });
+
+      // If RL learner is present, inject policy decision and trigger response
+      if (session.learner && session.realtimeWs) {
+        const ws = session.realtimeWs;
+
+        // Build session context for state extraction
+        const sessionContext: SessionContext = {
+          fsmContext: {
+            currentState: session.currentState,
+            stateHistory: session.stateHistory,
+            slots: {
+              identity_verified: session.stateHistory.includes("DEBT_CONTEXT"),
+              disclosure_complete: session.stateHistory.includes("DEBT_CONTEXT"),
+            },
+          },
+          caseData: session.caseData,
+          messages: session.messages,
+          signalHistory: [],
+          actionHistory: [],
+          turnCount: session.turnIndex,
+        };
+
+        // Extract RL state and select action
+        const rlState = extractState(sessionContext);
+        const allowedActions: RLAction[] = ["PROCEED", "EMPATHIZE", "OFFER_PLAN", "ASK_CLARIFY"];
+        const action = session.learner.selectAction(rlState, allowedActions);
+
+        console.log("[Realtime] RL policy selected action:", action, "for state:", session.currentState);
+
+        // Inject action as system message
+        ws.send(JSON.stringify({
+          type: "conversation.item.create",
+          item: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: `[Respond with intent: ${action}]` }],
+          },
+        }));
+
+        // Trigger response
+        ws.send(JSON.stringify({ type: "response.create" }));
+      }
       break;
 
     case "conversation.item.input_audio_transcription.completed":
@@ -417,8 +464,8 @@ async function startServer() {
     // Call Initiation
     // ==========================================================================
 
-    socket.on("call:initiate", (data: { caseData: CaseData; policyConfig: PolicyConfig }) => {
-      console.log("[Call] Received call:initiate", { caseId: data.caseData?.id });
+    socket.on("call:initiate", async (data: { caseData: CaseData; policyConfig: PolicyConfig; policyId?: string }) => {
+      console.log("[Call] Received call:initiate", { caseId: data.caseData?.id, policyId: data.policyId });
       const sessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       const policyCheck = policyEngine.evaluate({
@@ -438,6 +485,24 @@ async function startServer() {
         return;
       }
 
+      // Load RL learner if policyId is provided
+      let learner: Learner | null = null;
+      if (data.policyId) {
+        try {
+          const experiment = await db.getExperiment(data.policyId);
+          if (experiment && experiment.learner_state) {
+            const learnerState = JSON.parse(experiment.learner_state);
+            learner = createLearnerFromState({
+              type: learnerState.type || "bandit",
+              learnerState: learnerState,
+            });
+            console.log("[Call] Loaded RL learner:", data.policyId, "type:", learnerState.type);
+          }
+        } catch (err) {
+          console.error("[Call] Failed to load RL policy:", err);
+        }
+      }
+
       const session: VoiceSession = {
         id: sessionId,
         caseData: data.caseData,
@@ -452,6 +517,7 @@ async function startServer() {
         agentTranscript: "",
         userTranscript: "",
         callStartTime: null,
+        learner,
       };
 
       sessions.set(sessionId, session);
@@ -603,7 +669,8 @@ async function startServer() {
     socket.on("simulation:start", async (data: {
       personaId: string;
       policyType: string;
-      learnerFilename?: string;
+      policyId?: string;        // Load trained policy from database by ID
+      learnerFilename?: string; // Legacy: load from JSON file
     }) => {
       console.log("[Simulation] Received simulation:start", data);
 
@@ -615,33 +682,62 @@ async function startServer() {
 
       // Load learner if specified
       let learner: Learner | undefined;
-      if (data.learnerFilename && data.policyType !== "none") {
-        try {
-          const resultsDir = path.join(process.cwd(), "rl-results");
-          const filePath = path.join(resultsDir, data.learnerFilename);
+      let loadedPolicyId: string | undefined;
 
-          // Security check
-          if (!filePath.startsWith(resultsDir)) {
-            socket.emit("simulation:error", { error: "Invalid learner path" });
-            return;
-          }
-
-          if (fs.existsSync(filePath)) {
-            const content = fs.readFileSync(filePath, "utf-8");
-
-            if (data.policyType === "bandit") {
-              learner = new BanditLearner();
-              learner.load(content);
-              console.log("[Simulation] Loaded bandit learner from", data.learnerFilename);
-            } else if (data.policyType === "qlearning") {
-              learner = new QLearner();
-              learner.load(content);
-              console.log("[Simulation] Loaded Q-learning learner from", data.learnerFilename);
+      if (data.policyType !== "none") {
+        // Option 1: Load from database by policy ID (preferred)
+        if (data.policyId) {
+          try {
+            const experiment = db.getExperiment(data.policyId);
+            if (experiment?.learner_state) {
+              const learnerState = JSON.parse(experiment.learner_state);
+              learner = createLearnerFromState({
+                type: experiment.learner_type as "bandit" | "qlearning",
+                learnerState,
+              });
+              loadedPolicyId = data.policyId;
+              console.log("[Simulation] Loaded trained policy from database:", data.policyId);
+            } else {
+              console.warn("[Simulation] Policy not found or has no state:", data.policyId);
             }
+          } catch (error) {
+            console.error("[Simulation] Failed to load policy from database:", error);
           }
-        } catch (error) {
-          console.error("[Simulation] Failed to load learner:", error);
-          // Continue without learner
+        }
+        // Option 2: Load from JSON file (legacy)
+        else if (data.learnerFilename) {
+          try {
+            const resultsDir = path.join(process.cwd(), "rl-results");
+            const filePath = path.join(resultsDir, data.learnerFilename);
+
+            // Security check
+            if (!filePath.startsWith(resultsDir)) {
+              socket.emit("simulation:error", { error: "Invalid learner path" });
+              return;
+            }
+
+            if (fs.existsSync(filePath)) {
+              const content = fs.readFileSync(filePath, "utf-8");
+
+              if (data.policyType === "bandit") {
+                learner = new BanditLearner();
+                learner.load(content);
+                console.log("[Simulation] Loaded bandit learner from file:", data.learnerFilename);
+              } else if (data.policyType === "qlearning") {
+                learner = new QLearner();
+                learner.load(content);
+                console.log("[Simulation] Loaded Q-learning learner from file:", data.learnerFilename);
+              }
+            }
+          } catch (error) {
+            console.error("[Simulation] Failed to load learner from file:", error);
+          }
+        }
+
+        // If no trained policy loaded but policyType specified, create fresh learner
+        if (!learner && data.policyType !== "none") {
+          learner = createFreshLearner(data.policyType as "bandit" | "qlearning");
+          console.log("[Simulation] Created fresh", data.policyType, "learner (untrained)");
         }
       }
 

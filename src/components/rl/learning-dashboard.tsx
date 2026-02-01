@@ -20,7 +20,8 @@ import type {
   AggregateMetrics,
   EvalResult,
 } from "./types";
-import { SAMPLE_LEARNING_CURVE, SAMPLE_METRICS } from "./types";
+import { SAMPLE_LEARNING_CURVE, SAMPLE_METRICS, BASELINE_METRICS } from "./types";
+import { ExperimentRadar, type ExperimentVersion } from "./experiment-radar";
 
 interface LearningDashboardProps {
   learningCurve?: LearningCurvePoint[];
@@ -31,17 +32,23 @@ interface LearningDashboardProps {
   learnerType?: "bandit" | "qlearning";
   isTraining?: boolean;
   currentEpisode?: number;
+  /** All available experiments for the radar comparison */
+  allExperiments?: ExperimentVersion[];
+  /** Callback when an experiment is selected in the radar */
+  onExperimentSelect?: (id: string) => void;
 }
 
 export function LearningDashboard({
   learningCurve = SAMPLE_LEARNING_CURVE,
   evalResults = [],
   finalMetrics = SAMPLE_METRICS,
-  baselineMetrics,
+  baselineMetrics = BASELINE_METRICS,
   trainTimeMs = 0,
   learnerType = "bandit",
   isTraining = false,
   currentEpisode = 0,
+  allExperiments = [],
+  onExperimentSelect,
 }: LearningDashboardProps) {
   const [smoothWindow, setSmoothWindow] = useState(10);
 
@@ -175,6 +182,13 @@ export function LearningDashboard({
           subtext="turns"
         />
       </div>
+
+      {/* Multi-Experiment Radar Comparison */}
+      <ExperimentRadar
+        experiments={allExperiments}
+        baselineMetrics={baselineMetrics}
+        onExperimentSelect={onExperimentSelect}
+      />
 
       {/* Learning Curve Chart */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">

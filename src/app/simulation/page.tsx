@@ -64,7 +64,7 @@ export default function SimulationPage() {
   );
 
   const handleStart = useCallback(
-    (config: { personaId: string; policyType: string; learnerFilename?: string }) => {
+    (config: { personaId: string; policyType: string; policyId?: string }) => {
       clearAudioQueue();
       startSimulation(config);
     },

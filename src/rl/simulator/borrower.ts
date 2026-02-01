@@ -5,7 +5,6 @@
  * Tracks patience and can trigger hangup.
  */
 
-import type { UserSignal } from "../../lib/types";
 import type { PersonaConfig, BorrowerResponse } from "../types";
 import { describePersona } from "./personas";
 
@@ -79,114 +78,8 @@ function buildUserPrompt(
   return prompt;
 }
 
-/**
- * Detect signals from borrower response.
- */
-function detectSignals(text: string): UserSignal | undefined {
-  const lowerText = text.toLowerCase();
-
-  // Stop contact signals
-  if (
-    lowerText.includes("stop calling") ||
-    lowerText.includes("don't call") ||
-    lowerText.includes("do not call") ||
-    lowerText.includes("leave me alone") ||
-    lowerText.includes("harassment")
-  ) {
-    return "STOP_CONTACT";
-  }
-
-  // Dispute signals
-  if (
-    lowerText.includes("don't owe") ||
-    lowerText.includes("not my debt") ||
-    lowerText.includes("dispute") ||
-    lowerText.includes("prove it") ||
-    lowerText.includes("never heard of")
-  ) {
-    return "DISPUTE";
-  }
-
-  // Wrong party signals
-  if (
-    lowerText.includes("wrong number") ||
-    lowerText.includes("wrong person") ||
-    lowerText.includes("not me") ||
-    lowerText.includes("don't know who")
-  ) {
-    return "WRONG_PARTY";
-  }
-
-  // Attorney signals
-  if (
-    lowerText.includes("my lawyer") ||
-    lowerText.includes("my attorney") ||
-    lowerText.includes("contact my attorney")
-  ) {
-    return "ATTORNEY_REPRESENTED";
-  }
-
-  // Callback request
-  if (
-    lowerText.includes("call back") ||
-    lowerText.includes("call me later") ||
-    lowerText.includes("bad time") ||
-    lowerText.includes("busy right now")
-  ) {
-    return "CALLBACK_REQUEST";
-  }
-
-  // Agreement signals
-  if (
-    lowerText.includes("i can pay") ||
-    lowerText.includes("i'll pay") ||
-    lowerText.includes("i will pay") ||
-    lowerText.includes("sounds good") ||
-    lowerText.includes("that works") ||
-    lowerText.includes("okay, i agree") ||
-    lowerText.includes("yes, i agree") ||
-    lowerText.includes("let's do it") ||
-    lowerText.includes("sign me up")
-  ) {
-    return "AGREEMENT";
-  }
-
-  // Refusal signals
-  if (
-    lowerText.includes("i can't pay") ||
-    lowerText.includes("i won't pay") ||
-    lowerText.includes("no way") ||
-    lowerText.includes("not paying") ||
-    lowerText.includes("forget it") ||
-    lowerText.includes("absolutely not")
-  ) {
-    return "REFUSAL";
-  }
-
-  // Confusion signals
-  if (
-    lowerText.includes("what do you mean") ||
-    lowerText.includes("i don't understand") ||
-    lowerText.includes("confused") ||
-    lowerText.includes("what is this about") ||
-    lowerText.includes("huh?")
-  ) {
-    return "CONFUSION";
-  }
-
-  // Hostility signals
-  if (
-    lowerText.includes("scam") ||
-    lowerText.includes("fraud") ||
-    lowerText.includes("go to hell") ||
-    lowerText.includes("sue you") ||
-    lowerText.includes("threatening me")
-  ) {
-    return "HOSTILITY";
-  }
-
-  return undefined;
-}
+// Signal detection is now done via LLM in gym-wrapper using classifyStateWithLLM
+// This aligns RL training with production behavior
 
 /**
  * Check if response indicates hangup.
@@ -270,28 +163,18 @@ export class BorrowerSimulator {
     this.conversationHistory.push({ role: "borrower", text: responseText });
     this.lastAgentAction = agentUtterance;
 
-    // Detect signals and hangup
-    const detectedSignal = detectSignals(responseText);
+    // Detect hangup from response text
     const shouldHangup = detectHangup(responseText, this.patienceRemaining);
 
-    // Decrease patience on negative interactions
-    if (
-      detectedSignal === "HOSTILITY" ||
-      detectedSignal === "REFUSAL" ||
-      detectedSignal === "STOP_CONTACT"
-    ) {
+    // Small random patience decrease each turn
+    if (Math.random() < 0.15) {
       this.patienceRemaining = Math.max(0, this.patienceRemaining - 1);
     }
 
-    // Small random patience decrease
-    if (Math.random() < 0.1) {
-      this.patienceRemaining = Math.max(0, this.patienceRemaining - 0.5);
-    }
-
+    // Signal detection is now done via LLM in gym-wrapper using classifyStateWithLLM
     return {
       text: responseText,
       shouldHangup,
-      detectedSignal,
       patienceRemaining: this.patienceRemaining,
     };
   }

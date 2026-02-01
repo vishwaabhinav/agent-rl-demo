@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { getPersonaIds, getPersonaById } from "@/simulation";
-
-const RESULTS_DIR = path.join(process.cwd(), "rl-results");
+import * as db from "@/lib/db";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -24,79 +21,79 @@ export async function GET(request: Request) {
         }),
       });
 
-    case "learners":
+    case "policies":
+    case "learners": {
+      // List trained policies from database
       try {
-        if (!fs.existsSync(RESULTS_DIR)) {
-          return NextResponse.json({ learners: [] });
-        }
-        const files = fs.readdirSync(RESULTS_DIR)
-          .filter((f) => f.endsWith(".json"))
-          .map((filename) => {
-            const filePath = path.join(RESULTS_DIR, filename);
-            const stats = fs.statSync(filePath);
-            let type: "bandit" | "qlearning" | "unknown" = "unknown";
-            if (filename.startsWith("bandit")) type = "bandit";
-            else if (filename.startsWith("qlearning")) type = "qlearning";
-
-            // Try to read episode count from file
-            let episodesTrained = 0;
-            try {
-              const content = fs.readFileSync(filePath, "utf-8");
-              const data = JSON.parse(content);
-              episodesTrained = data.episodesTrained || data.summary?.numEpisodes || 0;
-            } catch {
-              // Ignore parse errors
+        const experiments = db.listExperiments("training");
+        const policies = experiments
+          .filter((exp) => exp.learner_state) // Only include those with saved state
+          .map((exp) => {
+            // Parse metrics if available
+            let successRate = 0;
+            let avgReturn = 0;
+            if (exp.final_metrics_json) {
+              try {
+                const metrics = JSON.parse(exp.final_metrics_json);
+                successRate = metrics.successRate || 0;
+                avgReturn = metrics.avgReturn || 0;
+              } catch {
+                // Ignore parse errors
+              }
             }
 
+            // Get episode count from stats
+            const stats = db.getExperimentStats(exp.id);
+
             return {
-              filename,
-              type,
-              episodesTrained,
-              modifiedAt: stats.mtime.toISOString(),
+              id: exp.id,
+              type: exp.learner_type || "unknown",
+              episodesTrained: stats.totalEpisodes,
+              successRate,
+              avgReturn,
+              createdAt: exp.created_at,
+              trainTimeMs: exp.train_time_ms,
             };
-          })
-          .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+          });
 
-        return NextResponse.json({ learners: files });
+        return NextResponse.json({ policies, learners: policies });
       } catch (error) {
-        console.error("Error listing learners:", error);
-        return NextResponse.json({ learners: [] });
+        console.error("Error listing policies:", error);
+        return NextResponse.json({ policies: [], learners: [] });
       }
+    }
 
+    case "load-policy":
     case "load-learner": {
-      const filename = searchParams.get("filename");
-      if (!filename) {
-        return NextResponse.json({ error: "Filename required" }, { status: 400 });
+      const policyId = searchParams.get("id") || searchParams.get("filename");
+      if (!policyId) {
+        return NextResponse.json({ error: "Policy ID required" }, { status: 400 });
       }
 
       try {
-        const filePath = path.join(RESULTS_DIR, filename);
-
-        // Security: ensure we're not escaping the results directory
-        if (!filePath.startsWith(RESULTS_DIR)) {
-          return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+        const experiment = db.getExperiment(policyId);
+        if (!experiment) {
+          return NextResponse.json({ error: "Policy not found" }, { status: 404 });
         }
 
-        if (!fs.existsSync(filePath)) {
-          return NextResponse.json({ error: "File not found" }, { status: 404 });
+        if (!experiment.learner_state) {
+          return NextResponse.json({ error: "No learner state saved" }, { status: 404 });
         }
 
-        const content = fs.readFileSync(filePath, "utf-8");
-        const data = JSON.parse(content);
-
-        // Determine learner type from filename
-        let type: "bandit" | "qlearning" | "unknown" = "unknown";
-        if (filename.startsWith("bandit")) type = "bandit";
-        else if (filename.startsWith("qlearning")) type = "qlearning";
+        // Parse the learner state
+        const learnerState = JSON.parse(experiment.learner_state);
 
         return NextResponse.json({
-          type,
-          filename,
-          data,
+          id: experiment.id,
+          type: experiment.learner_type,
+          learnerState,
+          config: experiment.config_json ? JSON.parse(experiment.config_json) : null,
+          metrics: experiment.final_metrics_json ? JSON.parse(experiment.final_metrics_json) : null,
+          createdAt: experiment.created_at,
         });
       } catch (error) {
-        console.error("Error loading learner:", error);
-        return NextResponse.json({ error: "Failed to load" }, { status: 500 });
+        console.error("Error loading policy:", error);
+        return NextResponse.json({ error: "Failed to load policy" }, { status: 500 });
       }
     }
 

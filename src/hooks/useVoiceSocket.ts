@@ -216,7 +216,7 @@ export function useVoiceSocket() {
   ]);
 
   // Initiate a call
-  const initiateCall = useCallback(() => {
+  const initiateCall = useCallback((policyId?: string) => {
     if (!socketRef.current || !currentCase) {
       console.error("[Socket] Cannot initiate call: no socket or case");
       return;
@@ -225,11 +225,12 @@ export function useVoiceSocket() {
     // Clear any previous blocked reason
     setBlockedReason(null);
 
-    console.log("[Socket] Initiating call for case:", currentCase.id);
+    console.log("[Socket] Initiating call for case:", currentCase.id, "with policy:", policyId || "none");
     socketRef.current.emit("call:initiate", {
       caseId: currentCase.id,
       caseData: currentCase,
       policyConfig: config,
+      policyId: policyId || undefined,
     });
   }, [currentCase, config, setBlockedReason]);
 

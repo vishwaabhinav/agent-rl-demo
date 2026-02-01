@@ -5,9 +5,9 @@
  * Integrates FSM, borrower simulator, and reward calculator.
  */
 
-import type { CaseData, FSMState, UserSignal, Intent, PolicyConfig, Message } from "../../lib/types";
+import type { CaseData, FSMState, UserSignal, Intent, Message } from "../../lib/types";
 import { FSMEngine, STATE_ALLOWED_INTENTS } from "../../lib/engine/fsm";
-import { buildAgentInstructions, buildIntentInjection } from "../../lib/voice/prompts";
+import { buildNLGPrompt } from "../../lib/voice/prompts";
 import { classifyStateWithLLM } from "../../lib/voice";
 import type {
   RLState,
@@ -247,28 +247,16 @@ export class TemplateUtteranceGenerator implements AgentUtteranceGenerator {
 
 /**
  * LLM-based utterance generator.
- * Uses the same prompts as voice agent for consistency.
+ * Stateless design: only knows current state + action, not the full call flow.
+ * FSM/RL is the control plane, LLM is just the language layer.
  */
 export class LLMUtteranceGenerator implements AgentUtteranceGenerator {
   private llmClient: LLMClient;
   private caseData: CaseData;
-  private systemPrompt: string;
-  private policyConfig: PolicyConfig;
 
   constructor(llmClient: LLMClient, caseData: CaseData) {
     this.llmClient = llmClient;
     this.caseData = caseData;
-    this.policyConfig = {
-      jurisdiction: caseData.jurisdiction,
-      callWindowStart: "08:00",
-      callWindowEnd: "21:00",
-      maxAttemptsPerDay: 3,
-      maxAttemptsTotal: 10,
-      prohibitedPhrases: [],
-      requireRecordingConsent: true,
-    };
-    // Use same prompt as voice agent
-    this.systemPrompt = buildAgentInstructions(caseData, this.policyConfig);
   }
 
   async generate(
@@ -276,26 +264,30 @@ export class LLMUtteranceGenerator implements AgentUtteranceGenerator {
     state: FSMState,
     context: AgentContext
   ): Promise<string> {
-    // Build conversation context
-    const recentHistory = context.conversationHistory.slice(-6);
-    let userPrompt = "";
+    // Format recent conversation history
+    const recentHistory = context.conversationHistory.slice(-4);
+    const historyText = recentHistory.length > 0
+      ? "Recent conversation:\n" + recentHistory.map(m =>
+          `${m.role === "agent" ? "You" : "Borrower"}: ${m.text}`
+        ).join("\n")
+      : "";
 
-    if (recentHistory.length > 0) {
-      userPrompt += "Conversation so far:\n";
-      for (const turn of recentHistory) {
-        const speaker = turn.role === "agent" ? "You" : "Borrower";
-        userPrompt += `${speaker}: ${turn.text}\n`;
-      }
-      userPrompt += "\n";
-    }
-
-    // Add current state context
-    userPrompt += `Current call stage: ${state}\n`;
-    userPrompt += buildIntentInjection(intent) + "\n\n";
-    userPrompt += "Respond with your next line (1-2 sentences, natural speech):";
+    // Build stateless NLG prompt - no call flow knowledge
+    const prompt = buildNLGPrompt(
+      state,
+      intent,
+      {
+        debtorName: this.caseData.debtorName,
+        creditorName: this.caseData.creditorName,
+        amountDue: this.caseData.amountDue,
+      },
+      historyText
+    );
 
     try {
-      return await this.llmClient.complete(userPrompt, this.systemPrompt);
+      // Minimal system prompt - all context is in the user prompt
+      const systemPrompt = "You are a professional debt collection agent. Generate natural, concise responses.";
+      return await this.llmClient.complete(prompt, systemPrompt);
     } catch {
       // Fallback to template
       const fallback = new TemplateUtteranceGenerator(this.caseData);

@@ -9,8 +9,6 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
 
 import type { CaseData } from "../lib/types";
 import type { PersonaConfig, Learner } from "./types";
@@ -31,10 +29,10 @@ import {
   compareLearners,
   TrainingConfig,
   TrainingResult,
-  saveResults,
   saveResultsToDb,
 } from "./evaluation/runner";
 import { computeMetrics, formatMetrics, compareMetrics } from "./evaluation/metrics";
+import * as db from "../lib/db";
 
 // ============ Configuration ============
 
@@ -54,15 +52,86 @@ const QUICK_TRAINING_CONFIG: TrainingConfig = {
   personas: Object.values(PRESET_PERSONAS),
 };
 
-// ============ Results Directory ============
+// Default epsilon for continued training (some exploration, but less than fresh start)
+const CONTINUED_TRAINING_EPSILON = 0.1;
 
-const RESULTS_DIR = join(process.cwd(), "rl-results");
+// ============ Continued Training ============
 
-function ensureResultsDir(): void {
-  if (!existsSync(RESULTS_DIR)) {
-    mkdirSync(RESULTS_DIR, { recursive: true });
+/**
+ * Load a learner from a previous experiment.
+ * Returns null if experiment not found or has no learner state.
+ */
+function loadLearnerFromExperiment(experimentId: string): { learner: Learner; type: "bandit" | "qlearning" } | null {
+  const experiment = db.getExperiment(experimentId);
+  if (!experiment) {
+    console.error(`Experiment not found: ${experimentId}`);
+    return null;
+  }
+
+  if (!experiment.learner_state) {
+    console.error(`Experiment has no saved learner state: ${experimentId}`);
+    return null;
+  }
+
+  if (!experiment.learner_type || experiment.learner_type === "baseline") {
+    console.error(`Cannot continue from baseline policy: ${experimentId}`);
+    return null;
+  }
+
+  const learnerType = experiment.learner_type;
+  let learner: Learner;
+
+  if (learnerType === "bandit") {
+    learner = new BanditLearner();
+    learner.load(experiment.learner_state);
+    // Reset epsilon for continued exploration
+    (learner as BanditLearner).setConfig({ epsilon: CONTINUED_TRAINING_EPSILON });
+  } else {
+    learner = new QLearner();
+    learner.load(experiment.learner_state);
+    // Reset epsilon for continued exploration
+    (learner as QLearner).setConfig({ epsilon: CONTINUED_TRAINING_EPSILON });
+  }
+
+  const policy = learner.getPolicy();
+  console.log(`Loaded ${learnerType} from ${experimentId}`);
+  console.log(`  Episodes previously trained: ${policy.episodesTrained}`);
+  console.log(`  Epsilon reset to: ${CONTINUED_TRAINING_EPSILON}`);
+
+  return { learner, type: learnerType };
+}
+
+/**
+ * List available experiments for continuation.
+ */
+function listAvailableExperiments(): void {
+  const experiments = db.listExperiments("training");
+  if (experiments.length === 0) {
+    console.log("No training experiments found.");
+    return;
+  }
+
+  console.log("\nAvailable experiments for continuation:\n");
+  console.log("ID                                          Type        Episodes    Success Rate");
+  console.log("-".repeat(85));
+
+  for (const exp of experiments.slice(0, 20)) {
+    const metrics = exp.final_metrics_json ? JSON.parse(exp.final_metrics_json) : null;
+    const config = exp.config_json ? JSON.parse(exp.config_json) : null;
+    const episodes = config?.numEpisodes || "?";
+    const successRate = metrics?.successRate ? `${(metrics.successRate * 100).toFixed(1)}%` : "N/A";
+
+    console.log(
+      `${exp.id.padEnd(44)} ${(exp.learner_type || "?").padEnd(12)} ${String(episodes).padEnd(12)} ${successRate}`
+    );
+  }
+
+  if (experiments.length > 20) {
+    console.log(`\n... and ${experiments.length - 20} more`);
   }
 }
+
+// ============ Results ============
 
 function saveExperimentResults(
   name: string,
@@ -70,22 +139,11 @@ function saveExperimentResults(
   learnerState: string,
   config?: TrainingConfig
 ): string {
-  ensureResultsDir();
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const experimentId = `${name}-${timestamp}`;
-  const filename = `${experimentId}.json`;
-  const filepath = join(RESULTS_DIR, filename);
-
-  // Save to JSON file (for backwards compatibility)
-  const data = saveResults(result, learnerState);
-  writeFileSync(filepath, data);
-
-  // Save to SQLite database (with full episode transcripts)
   const learnerType = name === "bandit" ? "bandit" : name === "qlearning" ? "qlearning" : "baseline";
   saveResultsToDb(experimentId, learnerType, result, learnerState, config);
-
-  console.log(`Results saved to: ${filepath}`);
-  return filepath;
+  return experimentId;
 }
 
 // ============ Experiment Runners ============
@@ -137,50 +195,91 @@ async function runBaselineExperiments(
 
 /**
  * Run bandit training experiment.
+ * @param continueFrom - Optional experiment ID to continue training from
  */
 async function runBanditExperiment(
   env: DebtCollectionEnv,
-  config: TrainingConfig = DEFAULT_TRAINING_CONFIG
+  config: TrainingConfig = DEFAULT_TRAINING_CONFIG,
+  continueFrom?: string
 ): Promise<TrainingResult> {
   console.log("\n" + "=".repeat(60));
-  console.log("BANDIT TRAINING");
+  console.log(continueFrom ? "BANDIT TRAINING (CONTINUED)" : "BANDIT TRAINING");
   console.log("=".repeat(60));
 
-  const bandit = new BanditLearner({
-    ...DEFAULT_BANDIT_CONFIG,
-    epsilon: 0.15, // Slightly more exploration
-    learningRate: 0.01,
-  });
+  let bandit: BanditLearner;
+  let previousEpisodes = 0;
+
+  if (continueFrom) {
+    const loaded = loadLearnerFromExperiment(continueFrom);
+    if (!loaded) {
+      throw new Error(`Failed to load experiment: ${continueFrom}`);
+    }
+    if (loaded.type !== "bandit") {
+      throw new Error(`Expected bandit, got ${loaded.type}`);
+    }
+    bandit = loaded.learner as BanditLearner;
+    previousEpisodes = bandit.getPolicy().episodesTrained;
+  } else {
+    bandit = new BanditLearner({
+      ...DEFAULT_BANDIT_CONFIG,
+      epsilon: 0.15,
+      learningRate: 0.01,
+    });
+  }
 
   const result = await trainAndEvaluate(env, bandit, config);
 
   console.log("\n--- Final Results ---");
   console.log(formatMetrics(result.finalMetrics));
   console.log(`Training time: ${(result.trainTimeMs / 1000).toFixed(1)}s`);
+  if (continueFrom) {
+    console.log(`Total episodes trained: ${previousEpisodes + config.numEpisodes}`);
+  }
 
   // Save results
-  saveExperimentResults("bandit", result, bandit.save(), config);
+  const expId = saveExperimentResults("bandit", result, bandit.save(), config);
+  if (continueFrom) {
+    console.log(`Continued from: ${continueFrom}`);
+  }
 
   return result;
 }
 
 /**
  * Run Q-learning training experiment.
+ * @param continueFrom - Optional experiment ID to continue training from
  */
 async function runQLearningExperiment(
   env: DebtCollectionEnv,
-  config: TrainingConfig = DEFAULT_TRAINING_CONFIG
+  config: TrainingConfig = DEFAULT_TRAINING_CONFIG,
+  continueFrom?: string
 ): Promise<TrainingResult> {
   console.log("\n" + "=".repeat(60));
-  console.log("Q-LEARNING TRAINING");
+  console.log(continueFrom ? "Q-LEARNING TRAINING (CONTINUED)" : "Q-LEARNING TRAINING");
   console.log("=".repeat(60));
 
-  const qlearner = new QLearner({
-    ...DEFAULT_QLEARNING_CONFIG,
-    alpha: 0.1,
-    gamma: 0.95,
-    epsilon: 0.15,
-  });
+  let qlearner: QLearner;
+  let previousEpisodes = 0;
+
+  if (continueFrom) {
+    const loaded = loadLearnerFromExperiment(continueFrom);
+    if (!loaded) {
+      throw new Error(`Failed to load experiment: ${continueFrom}`);
+    }
+    if (loaded.type !== "qlearning") {
+      throw new Error(`Expected qlearning, got ${loaded.type}`);
+    }
+    qlearner = loaded.learner as QLearner;
+    previousEpisodes = qlearner.getPolicy().episodesTrained;
+    console.log(`Q-table size (loaded): ${qlearner.getTableSize().states} states, ${qlearner.getTableSize().pairs} pairs`);
+  } else {
+    qlearner = new QLearner({
+      ...DEFAULT_QLEARNING_CONFIG,
+      alpha: 0.1,
+      gamma: 0.95,
+      epsilon: 0.15,
+    });
+  }
 
   const result = await trainAndEvaluate(env, qlearner, config);
 
@@ -188,9 +287,15 @@ async function runQLearningExperiment(
   console.log(formatMetrics(result.finalMetrics));
   console.log(`Training time: ${(result.trainTimeMs / 1000).toFixed(1)}s`);
   console.log(`Q-table size: ${qlearner.getTableSize().states} states, ${qlearner.getTableSize().pairs} pairs`);
+  if (continueFrom) {
+    console.log(`Total episodes trained: ${previousEpisodes + config.numEpisodes}`);
+  }
 
   // Save results
-  saveExperimentResults("qlearning", result, qlearner.save(), config);
+  const expId = saveExperimentResults("qlearning", result, qlearner.save(), config);
+  if (continueFrom) {
+    console.log(`Continued from: ${continueFrom}`);
+  }
 
   return result;
 }
@@ -294,15 +399,29 @@ Commands:
   bandit        Train bandit learner
   qlearning     Train Q-learning
   compare       Compare bandit vs Q-learning
+  list          List available experiments for continuation
 
 Options:
-  --quick       Use reduced episode count for faster iteration
-  --episodes N  Override number of training episodes
-  --help        Show this help message
+  --quick          Use reduced episode count for faster iteration
+  --episodes N     Override number of training episodes
+  --eval-episodes N  Override number of evaluation episodes (default: 20, final eval runs 2x)
+  --no-eval        Skip final evaluation entirely (just train and save)
+  --continue ID    Continue training from a previous experiment
+  --help           Show this help message
 
 Examples:
-  npx tsx src/rl/train.ts bandit --quick              # Fast with real LLM
-  npx tsx src/rl/train.ts bandit --episodes 200       # Real LLM with 200 episodes
+  npx tsx src/rl/train.ts bandit --quick                      # Fast training
+  npx tsx src/rl/train.ts bandit --episodes 200               # Train for 200 episodes
+  npx tsx src/rl/train.ts list                                # List previous experiments
+  npx tsx src/rl/train.ts bandit --continue <experiment-id>   # Continue from previous
+  npx tsx src/rl/train.ts qlearning --continue <id> --episodes 500  # Continue with 500 more episodes
+
+Continued Training:
+  Training can be resumed from any previous experiment. The learner state (Q-table
+  or action weights) is loaded, epsilon is reset to ${CONTINUED_TRAINING_EPSILON} to allow some exploration,
+  and training continues. Each continuation creates a new experiment entry.
+
+  100 episodes → save → 100 more episodes = 200 total episodes of learning
 `);
 }
 
@@ -325,8 +444,36 @@ async function main(): Promise<void> {
     episodesOverride = parseInt(args[episodesIdx + 1], 10);
   }
 
-  // Get command
-  const command = args.find((a) => !a.startsWith("--")) || "all";
+  // Parse eval episodes override
+  let evalEpisodesOverride: number | undefined;
+  const evalEpisodesIdx = args.indexOf("--eval-episodes");
+  if (evalEpisodesIdx !== -1 && args[evalEpisodesIdx + 1]) {
+    evalEpisodesOverride = parseInt(args[evalEpisodesIdx + 1], 10);
+  }
+
+  // Parse no-eval flag
+  const skipEval = args.includes("--no-eval");
+
+  // Parse continue from
+  let continueFrom: string | undefined;
+  const continueIdx = args.indexOf("--continue");
+  if (continueIdx !== -1 && args[continueIdx + 1]) {
+    continueFrom = args[continueIdx + 1];
+  }
+
+  // Get command (first arg that doesn't start with --)
+  const command = args.find((a) =>
+    !a.startsWith("--") &&
+    a !== continueFrom &&
+    a !== String(episodesOverride) &&
+    a !== String(evalEpisodesOverride)
+  ) || "all";
+
+  // Handle list command (doesn't need environment)
+  if (command === "list") {
+    listAvailableExperiments();
+    return;
+  }
 
   // Create environment with appropriate LLM clients
   const caseData = createTestCase();
@@ -338,29 +485,44 @@ async function main(): Promise<void> {
 
   // Build config
   const baseConfig = quick ? QUICK_TRAINING_CONFIG : DEFAULT_TRAINING_CONFIG;
-  const config: TrainingConfig = episodesOverride
-    ? { ...baseConfig, numEpisodes: episodesOverride }
-    : baseConfig;
+  const config: TrainingConfig = {
+    ...baseConfig,
+    ...(episodesOverride && { numEpisodes: episodesOverride }),
+    ...(evalEpisodesOverride !== undefined && { evalEpisodes: evalEpisodesOverride }),
+    ...(skipEval && { evalEpisodes: 0 }),
+  };
 
   // Run requested command
   switch (command) {
     case "all":
+      if (continueFrom) {
+        console.error("Cannot use --continue with 'all' command. Use bandit or qlearning.");
+        process.exit(1);
+      }
       await runAllExperiments(quick);
       break;
 
     case "baseline":
+      if (continueFrom) {
+        console.error("Cannot continue from baseline policies.");
+        process.exit(1);
+      }
       await runBaselineExperiments(env, quick ? 50 : 100);
       break;
 
     case "bandit":
-      await runBanditExperiment(env, config);
+      await runBanditExperiment(env, config, continueFrom);
       break;
 
     case "qlearning":
-      await runQLearningExperiment(env, config);
+      await runQLearningExperiment(env, config, continueFrom);
       break;
 
     case "compare":
+      if (continueFrom) {
+        console.error("Cannot use --continue with 'compare' command.");
+        process.exit(1);
+      }
       await runComparisonExperiment(env, config);
       break;
 

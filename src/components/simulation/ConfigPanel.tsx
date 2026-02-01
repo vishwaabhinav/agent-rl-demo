@@ -11,18 +11,21 @@ interface Persona {
   path: FSMState[];
 }
 
-interface LearnerFile {
-  filename: string;
+interface TrainedPolicy {
+  id: string;
   type: "bandit" | "qlearning" | "unknown";
   episodesTrained: number;
-  modifiedAt: string;
+  successRate: number;
+  avgReturn: number;
+  createdAt: string;
+  trainTimeMs: number | null;
 }
 
 interface ConfigPanelProps {
   onStart: (config: {
     personaId: string;
     policyType: string;
-    learnerFilename?: string;
+    policyId?: string;
   }) => void;
   onStop: () => void;
   isRunning: boolean;
@@ -31,10 +34,10 @@ interface ConfigPanelProps {
 
 export function ConfigPanel({ onStart, onStop, isRunning, disabled }: ConfigPanelProps) {
   const [personas, setPersonas] = useState<Persona[]>([]);
-  const [learners, setLearners] = useState<LearnerFile[]>([]);
+  const [policies, setPolicies] = useState<TrainedPolicy[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<string>("");
   const [policyType, setPolicyType] = useState<string>("none");
-  const [selectedLearner, setSelectedLearner] = useState<string>("");
+  const [selectedPolicy, setSelectedPolicy] = useState<string>("");
 
   // Load personas
   useEffect(() => {
@@ -49,26 +52,26 @@ export function ConfigPanel({ onStart, onStop, isRunning, disabled }: ConfigPane
       .catch(console.error);
   }, []);
 
-  // Load available learners
+  // Load available trained policies from database
   useEffect(() => {
-    fetch("/api/simulation?action=learners")
+    fetch("/api/simulation?action=policies")
       .then((res) => res.json())
       .then((data) => {
-        setLearners(data.learners || []);
+        setPolicies(data.policies || []);
       })
       .catch(console.error);
   }, []);
 
-  // Filter learners by policy type
-  const filteredLearners = learners.filter((l) => {
-    if (policyType === "bandit") return l.type === "bandit";
-    if (policyType === "qlearning") return l.type === "qlearning";
+  // Filter policies by type
+  const filteredPolicies = policies.filter((p) => {
+    if (policyType === "bandit") return p.type === "bandit";
+    if (policyType === "qlearning") return p.type === "qlearning";
     return false;
   });
 
-  // Reset learner selection when policy type changes
+  // Reset policy selection when policy type changes
   useEffect(() => {
-    setSelectedLearner("");
+    setSelectedPolicy("");
   }, [policyType]);
 
   const selectedPersonaData = personas.find((p) => p.id === selectedPersona);
@@ -77,7 +80,7 @@ export function ConfigPanel({ onStart, onStop, isRunning, disabled }: ConfigPane
     onStart({
       personaId: selectedPersona,
       policyType,
-      learnerFilename: policyType !== "none" ? selectedLearner || undefined : undefined,
+      policyId: policyType !== "none" ? selectedPolicy || undefined : undefined,
     });
   };
 
@@ -130,29 +133,36 @@ export function ConfigPanel({ onStart, onStop, isRunning, disabled }: ConfigPane
         </div>
       </div>
 
-      {/* Learner Selection (when policy is not "none") */}
+      {/* Policy Selection (when policy type is not "none") */}
       {policyType !== "none" && (
         <div>
           <label className="block text-xs text-zinc-500 mb-1">
-            Load Trained Policy (Optional)
+            Load Trained Policy
           </label>
           <select
-            value={selectedLearner}
-            onChange={(e) => setSelectedLearner(e.target.value)}
+            value={selectedPolicy}
+            onChange={(e) => setSelectedPolicy(e.target.value)}
             disabled={isRunning || disabled}
             className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-300"
           >
-            <option value="">New (untrained)</option>
-            {filteredLearners.map((l) => (
-              <option key={l.filename} value={l.filename}>
-                {l.filename} ({l.episodesTrained} episodes)
+            <option value="">Fresh (untrained)</option>
+            {filteredPolicies.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.id.slice(0, 25)}... ({p.episodesTrained} eps, {(p.successRate * 100).toFixed(0)}% success)
               </option>
             ))}
           </select>
-          {filteredLearners.length === 0 && (
+          {filteredPolicies.length === 0 && (
             <p className="text-xs text-zinc-500 mt-1">
-              No trained {policyType} policies found in rl-results/
+              No trained {policyType} policies found. Run training first.
             </p>
+          )}
+          {selectedPolicy && (
+            <div className="mt-2 p-2 bg-zinc-800/50 rounded text-xs text-zinc-400">
+              <div>Episodes: {filteredPolicies.find(p => p.id === selectedPolicy)?.episodesTrained}</div>
+              <div>Success: {((filteredPolicies.find(p => p.id === selectedPolicy)?.successRate || 0) * 100).toFixed(1)}%</div>
+              <div>Avg Return: {(filteredPolicies.find(p => p.id === selectedPolicy)?.avgReturn || 0).toFixed(3)}</div>
+            </div>
           )}
         </div>
       )}

@@ -7,6 +7,7 @@ import { PolicyInspector } from "@/components/rl/policy-inspector";
 import { TopNav } from "@/components/nav/TopNav";
 import { LineChart, Film, Target } from "lucide-react";
 import type { ReactNode } from "react";
+import type { ExperimentVersion } from "@/components/rl/experiment-radar";
 
 type TabId = "dashboard" | "episodes" | "policy";
 
@@ -31,6 +32,15 @@ interface Experiment {
   totalEpisodes: number;
   avgReturn: number;
   successRate: number;
+  finalMetrics?: {
+    avgReturn: number;
+    stdReturn?: number;
+    successRate: number;
+    partialSuccessRate?: number;
+    avgLength?: number;
+    hangupRate?: number;
+    escalationRate?: number;
+  } | null;
 }
 
 interface ExperimentDetail {
@@ -210,6 +220,45 @@ export default function RLDashboardPage() {
 
   const policyData = parsePolicyData();
 
+  // Transform experiments to ExperimentVersion format for radar chart
+  const experimentVersions: ExperimentVersion[] = experiments
+    .filter((exp) => exp.learnerType) // Only include RL experiments
+    .map((exp) => {
+      const shortId = (() => {
+        const parts = exp.id.split("-");
+        if (parts.length >= 4) {
+          const type = parts[0].slice(0, 6);
+          const dateMatch = exp.id.match(/(\d{4})-(\d{2})-(\d{2})T?(\d{2})?-?(\d{2})?/);
+          if (dateMatch) {
+            return `${type}-${dateMatch[2]}${dateMatch[3]}-${dateMatch[4] || "00"}${dateMatch[5] || "00"}`;
+          }
+        }
+        return exp.id.slice(0, 12);
+      })();
+
+      const fm = exp.finalMetrics;
+
+      return {
+        id: exp.id,
+        shortId,
+        learnerType: (exp.learnerType as "bandit" | "qlearning") || "baseline",
+        episodesTrained: exp.totalEpisodes,
+        successRate: fm?.successRate ?? exp.successRate,
+        avgReturn: fm?.avgReturn ?? exp.avgReturn,
+        createdAt: exp.createdAt,
+        metrics: {
+          numEpisodes: exp.totalEpisodes,
+          avgReturn: fm?.avgReturn ?? exp.avgReturn,
+          stdReturn: fm?.stdReturn ?? 0,
+          successRate: fm?.successRate ?? exp.successRate,
+          partialSuccessRate: fm?.partialSuccessRate ?? 0,
+          avgLength: fm?.avgLength ?? 0,
+          hangupRate: fm?.hangupRate ?? 0,
+          escalationRate: fm?.escalationRate ?? 0,
+        },
+      };
+    });
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <TopNav />
@@ -285,6 +334,8 @@ export default function RLDashboardPage() {
             } : undefined}
             trainTimeMs={experimentDetail?.trainTimeMs ?? undefined}
             learnerType={experimentDetail?.learnerType as "bandit" | "qlearning" | undefined}
+            allExperiments={experimentVersions}
+            onExperimentSelect={(id) => setSelectedExperimentId(id)}
           />
         )}
 

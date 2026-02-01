@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useCallStore, DEMO_CASES } from "@/stores/callStore";
 import { useConfigStore, JURISDICTION_PRESETS } from "@/stores/configStore";
 import { isActiveStatus, isTerminalStatus } from "@/lib/types";
@@ -23,20 +24,40 @@ import {
   AlertTriangle,
   DollarSign,
   Calendar,
+  Brain,
 } from "lucide-react";
 
+interface TrainedPolicy {
+  id: string;
+  type: "bandit" | "qlearning" | "unknown";
+  episodesTrained: number;
+  successRate: number;
+  avgReturn: number;
+  createdAt: string;
+}
+
 interface ControlPanelProps {
-  onInitiateCall?: () => void;
+  onInitiateCall?: (policyId?: string) => void;
   onEndCall?: () => void;
 }
 
 export function ControlPanel({ onInitiateCall, onEndCall }: ControlPanelProps) {
   const { currentCase, selectCase, status, reset, blockedReason, blockedRiskLevel } = useCallStore();
   const { config, setConfig, setJurisdiction } = useConfigStore();
+  const [policies, setPolicies] = useState<TrainedPolicy[]>([]);
+  const [selectedPolicy, setSelectedPolicy] = useState<string>("");
 
   const isCallActive = isActiveStatus(status);
   const isCallTerminal = isTerminalStatus(status);
   const canStartCall = currentCase && status === "idle";
+
+  // Load trained policies
+  useEffect(() => {
+    fetch("/api/simulation?action=policies")
+      .then((res) => res.json())
+      .then((data) => setPolicies(data.policies || []))
+      .catch(console.error);
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -241,6 +262,49 @@ export function ControlPanel({ onInitiateCall, onEndCall }: ControlPanelProps) {
 
       <Separator className="bg-border" />
 
+      {/* RL Policy Selection */}
+      <section>
+        <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 flex items-center gap-1.5">
+          <Brain className="w-3 h-3" />
+          RL Policy (Optional)
+        </label>
+        <Select
+          value={selectedPolicy || "none"}
+          onValueChange={(value) => setSelectedPolicy(value === "none" ? "" : value)}
+          disabled={isCallActive}
+        >
+          <SelectTrigger className="bg-card border-border">
+            <SelectValue placeholder="No RL policy (baseline)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No RL policy (baseline)</SelectItem>
+            {policies.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs truncate max-w-[180px]">{p.id.slice(0, 25)}...</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {p.type} · {p.episodesTrained} eps · {(p.successRate * 100).toFixed(0)}% success
+                  </span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedPolicy && (
+          <div className="mt-2 p-2 rounded bg-primary/10 border border-primary/20 text-xs">
+            <div className="flex items-center gap-1.5 text-primary">
+              <Brain className="w-3 h-3" />
+              <span className="font-medium">RL-assisted mode</span>
+            </div>
+            <p className="text-muted-foreground mt-1">
+              Agent will use trained policy for action selection
+            </p>
+          </div>
+        )}
+      </section>
+
+      <Separator className="bg-border" />
+
       {/* Voice status during active call - voice handled at socket level */}
       {status === "active" && (
         <div className="py-2 text-center">
@@ -276,9 +340,10 @@ export function ControlPanel({ onInitiateCall, onEndCall }: ControlPanelProps) {
                 canStartCall,
                 currentCase: !!currentCase,
                 status,
+                policyId: selectedPolicy || undefined,
               });
               if (onInitiateCall) {
-                onInitiateCall();
+                onInitiateCall(selectedPolicy || undefined);
               }
             }}
             disabled={!canStartCall || !onInitiateCall}
@@ -286,7 +351,7 @@ export function ControlPanel({ onInitiateCall, onEndCall }: ControlPanelProps) {
             size="lg"
           >
             <Phone className="w-4 h-4 mr-2" />
-            Initiate Call
+            {selectedPolicy ? "Initiate RL Call" : "Initiate Call"}
           </Button>
         ) : isCallTerminal ? (
           <Button

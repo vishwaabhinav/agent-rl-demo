@@ -234,7 +234,7 @@ export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
   const startSimulation = useCallback((config: {
     personaId: string;
     policyType: string;
-    learnerFilename?: string;
+    policyId?: string;
   }) => {
     if (!socketRef.current) {
       console.error("[SimSocket] Cannot start - no socket");

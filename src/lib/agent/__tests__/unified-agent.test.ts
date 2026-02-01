@@ -120,6 +120,7 @@ describe("UnifiedAgent", () => {
         reset: jest.fn(),
         save: jest.fn().mockReturnValue("{}"),
         load: jest.fn(),
+        getPolicy: jest.fn().mockReturnValue({ actionValues: {} }),
       };
 
       const config: AgentConfig = {
