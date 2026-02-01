@@ -28,8 +28,8 @@ export const STATE_ALLOWED_INTENTS: Record<FSMState, Intent[]> = {
 // Standard transitions from one state to the next
 const STANDARD_TRANSITIONS: Partial<Record<FSMState, FSMState>> = {
   OPENING: "DISCLOSURE",
-  DISCLOSURE: "IDENTITY_VERIFICATION",
-  IDENTITY_VERIFICATION: "CONSENT_RECORDING",
+  DISCLOSURE: "CONSENT_RECORDING",
+  // IDENTITY_VERIFICATION is skipped in standard flow but can be reached via forceTransition()
   CONSENT_RECORDING: "DEBT_CONTEXT",
   DEBT_CONTEXT: "NEGOTIATION",
   NEGOTIATION: "PAYMENT_SETUP",
