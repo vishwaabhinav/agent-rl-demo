@@ -268,14 +268,23 @@ export function createFloorController(config: FloorControllerConfig): FloorContr
 
     canSpeak(party: "agent" | "borrower"): boolean {
       // If idle, anyone can start
-      if (state === TurnState.IDLE) return true;
+      if (state === TurnState.IDLE) {
+        console.log(`[Floor] canSpeak(${party}): YES (idle)`);
+        return true;
+      }
 
       // If this party holds the floor, they can continue
-      if (currentSpeaker === party) return true;
+      if (currentSpeaker === party) {
+        return true; // Don't log every audio delta
+      }
 
       // In production mode, human (borrower) can barge in
-      if (config.allowBargeIn && party === "borrower") return true;
+      if (config.allowBargeIn && party === "borrower") {
+        console.log(`[Floor] canSpeak(${party}): YES (barge-in)`);
+        return true;
+      }
 
+      console.log(`[Floor] canSpeak(${party}): NO (speaker=${currentSpeaker}, state=${state})`);
       return false;
     },
 
@@ -366,6 +375,12 @@ export function createConnectedRealtimeSessions(
     ...floorConfig,
   });
 
+  // Track audio flow for overlap detection
+  let agentAudioActive = false;
+  let borrowerAudioActive = false;
+  let lastAgentAudioTime = 0;
+  let lastBorrowerAudioTime = 0;
+
   let agentSession: RealtimeSessionHandle;
   let borrowerSession: RealtimeSessionHandle;
 
@@ -373,19 +388,37 @@ export function createConnectedRealtimeSessions(
   agentSession = createRealtimeSession(agentConfig, {
     onReady: () => console.log("[Simulation] Agent session ready"),
     onAgentSpeechStart: () => {
+      agentAudioActive = true;
+      console.log(`[Overlap] Agent speech START (borrower active: ${borrowerAudioActive})`);
+      if (borrowerAudioActive) {
+        console.warn("[Overlap] ⚠️ OVERLAP DETECTED: Agent starting while borrower active!");
+      }
       floor.startSpeaking("agent");
     },
     onAgentTranscript: (text, isFinal) => {
       callbacks.onAgentTranscript?.(text, isFinal);
     },
     onAudioDelta: (audio) => {
+      const now = Date.now();
+      lastAgentAudioTime = now;
+
+      // Check for recent borrower audio (within 100ms = potential overlap)
+      if (now - lastBorrowerAudioTime < 100) {
+        console.warn(`[Overlap] ⚠️ Agent audio within 100ms of borrower audio!`);
+      }
+
       // Check floor control before sending audio
-      if (!floor.canSpeak("agent")) return;
+      if (!floor.canSpeak("agent")) {
+        console.log(`[Overlap] Agent audio BLOCKED by floor control`);
+        return;
+      }
       // Pipe agent audio to borrower input
       callbacks.onAgentAudio?.(audio);
       borrowerSession?.sendAudio(audio);
     },
     onAgentSpeechEnd: () => {
+      agentAudioActive = false;
+      console.log(`[Overlap] Agent speech END`);
       floor.stopSpeaking("agent");
       floor.transferFloor();
     },
@@ -397,6 +430,11 @@ export function createConnectedRealtimeSessions(
   borrowerSession = createRealtimeSession(borrowerConfig, {
     onReady: () => console.log("[Simulation] Borrower session ready"),
     onAgentSpeechStart: () => {
+      borrowerAudioActive = true;
+      console.log(`[Overlap] Borrower speech START (agent active: ${agentAudioActive})`);
+      if (agentAudioActive) {
+        console.warn("[Overlap] ⚠️ OVERLAP DETECTED: Borrower starting while agent active!");
+      }
       floor.startSpeaking("borrower");
     },
     onAgentTranscript: (text, isFinal) => {
@@ -404,13 +442,26 @@ export function createConnectedRealtimeSessions(
       callbacks.onBorrowerTranscript?.(text, isFinal);
     },
     onAudioDelta: (audio) => {
+      const now = Date.now();
+      lastBorrowerAudioTime = now;
+
+      // Check for recent agent audio (within 100ms = potential overlap)
+      if (now - lastAgentAudioTime < 100) {
+        console.warn(`[Overlap] ⚠️ Borrower audio within 100ms of agent audio!`);
+      }
+
       // Check floor control before sending audio
-      if (!floor.canSpeak("borrower")) return;
+      if (!floor.canSpeak("borrower")) {
+        console.log(`[Overlap] Borrower audio BLOCKED by floor control`);
+        return;
+      }
       // Pipe borrower audio to agent input
       callbacks.onBorrowerAudio?.(audio);
       agentSession?.sendAudio(audio);
     },
     onAgentSpeechEnd: () => {
+      borrowerAudioActive = false;
+      console.log(`[Overlap] Borrower speech END`);
       floor.stopSpeaking("borrower");
       floor.transferFloor();
     },
