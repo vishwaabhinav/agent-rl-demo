@@ -20,12 +20,15 @@ function getOpenAIClient(): OpenAI {
 const STATE_CLASSIFICATION_PROMPT = `You are analyzing a debt collection call to determine the NEXT state (one step at a time).
 
 MAIN FLOW (must progress ONE STEP at a time):
-1. OPENING → 2. DISCLOSURE → 3. IDENTITY_VERIFICATION → 4. CONSENT_RECORDING → 5. DEBT_CONTEXT → 6. NEGOTIATION → 7. PAYMENT_SETUP → 8. WRAPUP → 9. END_CALL
+1. OPENING → 2. DISCLOSURE → 3. CONSENT_RECORDING → 4. DEBT_CONTEXT → 5. NEGOTIATION → 6. PAYMENT_SETUP → 7. WRAPUP → 8. END_CALL
+
+OPTIONAL STATE:
+- IDENTITY_VERIFICATION: Can be entered if agent needs to verify identity, but is NOT required in the main flow
 
 STATE DEFINITIONS:
 - OPENING: Initial greeting. User confirms they are the person ("yes speaking", "this is [name]") → move to DISCLOSURE
-- DISCLOSURE: Agent introduces themselves and company. Any user response → move to IDENTITY_VERIFICATION
-- IDENTITY_VERIFICATION: Agent asks for SSN/DOB. User provides verification info → move to CONSENT_RECORDING
+- DISCLOSURE: Agent introduces themselves and company. Any user response → move to CONSENT_RECORDING
+- IDENTITY_VERIFICATION: (Optional) Agent asks for SSN/DOB. User provides verification info → move to CONSENT_RECORDING
 - CONSENT_RECORDING: Agent asks "can I record this call?". User says yes/no → move to DEBT_CONTEXT
 - DEBT_CONTEXT: Agent explains the debt. User asks questions or acknowledges → move to NEGOTIATION
 - NEGOTIATION: Discussing payment options/amounts. User AGREES to pay → move to PAYMENT_SETUP
@@ -34,7 +37,8 @@ STATE DEFINITIONS:
 - END_CALL: Goodbyes exchanged
 
 CRITICAL: You can ONLY move to the NEXT state in the sequence.
-- If current is IDENTITY_VERIFICATION, next can ONLY be CONSENT_RECORDING (not DEBT_CONTEXT!)
+- If current is DISCLOSURE, next can be CONSENT_RECORDING (or optionally IDENTITY_VERIFICATION)
+- If current is IDENTITY_VERIFICATION, next can ONLY be CONSENT_RECORDING
 - If current is CONSENT_RECORDING, next can ONLY be DEBT_CONTEXT
 - Do NOT skip states!
 
