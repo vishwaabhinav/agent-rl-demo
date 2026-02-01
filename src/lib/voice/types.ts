@@ -98,3 +98,36 @@ export interface StateClassificationResult {
   confidence: number;
   reasoning: string;
 }
+
+/**
+ * Turn-taking state for floor control
+ */
+export enum TurnState {
+  IDLE = "idle",
+  LISTENING = "listening",
+  SPEAKING = "speaking",
+}
+
+/**
+ * Floor controller configuration
+ */
+export interface FloorControllerConfig {
+  mode: "simulation" | "production";
+  allowBargeIn: boolean;
+  floorTransferDelayMs: number;
+}
+
+/**
+ * Floor controller for turn-taking management
+ * Prevents overlapping voices by tracking who holds the floor
+ */
+export interface FloorController {
+  readonly currentSpeaker: "agent" | "borrower" | null;
+  readonly state: TurnState;
+  readonly isTransitioning: boolean;
+
+  canSpeak(party: "agent" | "borrower"): boolean;
+  startSpeaking(party: "agent" | "borrower"): boolean;
+  stopSpeaking(party: "agent" | "borrower"): void;
+  transferFloor(): void;
+}
