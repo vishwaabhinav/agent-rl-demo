@@ -16,12 +16,14 @@ import { policyEngine } from "./src/lib/engine/policy";
 import {
   type VoiceSession,
   type CallStatus,
+  type FloorController,
   isValidTransition,
   classifyStateWithLLM,
   shouldApplyTransition,
   buildAgentInstructions,
   buildGreetingTrigger,
   buildStateTransitionPrompt,
+  createFloorController,
 } from "./src/lib/voice";
 
 // Import simulation module
@@ -165,10 +167,13 @@ function handleRealtimeEvent(
       break;
 
     case "input_audio_buffer.speech_started":
+      session.floor?.startSpeaking("borrower");
       emit("voice:userSpeaking", { speaking: true });
       break;
 
     case "input_audio_buffer.speech_stopped":
+      session.floor?.stopSpeaking("borrower");
+      session.floor?.transferFloor();
       emit("voice:userSpeaking", { speaking: false });
 
       // If RL learner is present, inject policy decision and trigger response
@@ -240,6 +245,7 @@ function handleRealtimeEvent(
       break;
 
     case "response.created":
+      session.floor?.startSpeaking("agent");
       console.log("[Realtime] Response created - agent starting to speak");
       emit("voice:agentSpeaking", { speaking: true });
       session.agentTranscript = "";
@@ -281,6 +287,8 @@ function handleRealtimeEvent(
       break;
 
     case "response.done":
+      session.floor?.stopSpeaking("agent");
+      session.floor?.transferFloor();
       emit("voice:agentSpeaking", { speaking: false });
 
       // Build trace for debug panel
@@ -518,6 +526,11 @@ async function startServer() {
         userTranscript: "",
         callStartTime: null,
         learner,
+        floor: createFloorController({
+          mode: "production",
+          allowBargeIn: true,
+          floorTransferDelayMs: 300,
+        }),
       };
 
       sessions.set(sessionId, session);

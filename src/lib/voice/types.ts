@@ -33,6 +33,8 @@ export interface VoiceSession extends BaseVoiceSession {
   callStartTime: number | null;
   /** Optional RL learner for policy-guided responses */
   learner: Learner | null;
+  /** Floor controller for turn-taking management */
+  floor?: FloorController;
 }
 
 /**

@@ -11,6 +11,8 @@ export type {
   RealtimeSessionCallbacks,
   RealtimeSessionHandle,
   StateClassificationResult,
+  FloorController,
+  FloorControllerConfig,
 } from "./types";
 
 // FSM validation
@@ -45,4 +47,5 @@ export {
 export {
   createRealtimeSession,
   createConnectedRealtimeSessions,
+  createFloorController,
 } from "./realtime";
