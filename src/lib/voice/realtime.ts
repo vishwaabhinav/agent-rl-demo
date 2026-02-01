@@ -11,7 +11,10 @@ import type {
   RealtimeSessionConfig,
   RealtimeSessionCallbacks,
   RealtimeSessionHandle,
+  FloorController,
+  FloorControllerConfig,
 } from "./types";
+import { TurnState } from "./types";
 
 const REALTIME_API_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime";
 
@@ -247,6 +250,80 @@ function handleRealtimeEvent(
         console.log(`[Realtime] Event: ${type}`);
       }
   }
+}
+
+/**
+ * Create a floor controller for turn-taking
+ */
+export function createFloorController(config: FloorControllerConfig): FloorController {
+  let currentSpeaker: "agent" | "borrower" | null = null;
+  let state: TurnState = TurnState.IDLE;
+  let isTransitioning = false;
+  let transferTimeout: NodeJS.Timeout | null = null;
+
+  const controller: FloorController = {
+    get currentSpeaker() { return currentSpeaker; },
+    get state() { return state; },
+    get isTransitioning() { return isTransitioning; },
+
+    canSpeak(party: "agent" | "borrower"): boolean {
+      // If idle, anyone can start
+      if (state === TurnState.IDLE) return true;
+
+      // If this party holds the floor, they can continue
+      if (currentSpeaker === party) return true;
+
+      // In production mode, human (borrower) can barge in
+      if (config.allowBargeIn && party === "borrower") return true;
+
+      return false;
+    },
+
+    startSpeaking(party: "agent" | "borrower"): boolean {
+      if (isTransitioning) return false;
+      if (!controller.canSpeak(party)) return false;
+
+      // Cancel pending floor transfer
+      if (transferTimeout) {
+        clearTimeout(transferTimeout);
+        transferTimeout = null;
+      }
+
+      isTransitioning = true;
+
+      if (currentSpeaker && currentSpeaker !== party) {
+        console.log(`[Floor] Barge-in: ${party} interrupting ${currentSpeaker}`);
+      }
+
+      currentSpeaker = party;
+      state = TurnState.SPEAKING;
+      isTransitioning = false;
+      console.log(`[Floor] ${party} started speaking`);
+      return true;
+    },
+
+    stopSpeaking(party: "agent" | "borrower"): void {
+      if (currentSpeaker !== party) return;
+      state = TurnState.LISTENING;
+      console.log(`[Floor] ${party} stopped speaking`);
+    },
+
+    transferFloor(): void {
+      if (isTransitioning) return;
+
+      isTransitioning = true;
+      transferTimeout = setTimeout(() => {
+        const nextSpeaker = currentSpeaker === "agent" ? "borrower" : "agent";
+        console.log(`[Floor] Transferring floor to ${nextSpeaker}`);
+        currentSpeaker = nextSpeaker;
+        state = TurnState.IDLE;
+        isTransitioning = false;
+        transferTimeout = null;
+      }, config.floorTransferDelayMs);
+    },
+  };
+
+  return controller;
 }
 
 /**
