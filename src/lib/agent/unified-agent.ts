@@ -309,7 +309,6 @@ export class UnifiedAgent {
     const advancingActions: Record<string, RLAction[]> = {
       OPENING: ["PROCEED"],
       DISCLOSURE: ["IDENTIFY_SELF", "PROCEED"],
-      IDENTITY_VERIFICATION: ["CONFIRM_IDENTITY"],
       CONSENT_RECORDING: ["PROCEED"],
       DEBT_CONTEXT: ["PROCEED"],
       NEGOTIATION: ["PROCEED", "REQUEST_CALLBACK"],
