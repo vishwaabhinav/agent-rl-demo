@@ -104,7 +104,8 @@ export function useStereoAudioPlayback({
     [enabled, initAudioContext]
   );
 
-  // Process queued audio - plays stereo (agent L, borrower R)
+  // Process queued audio - SERIAL playback (one speaker at a time, no overlap)
+  // Agent queue is processed first, then borrower queue
   const processQueue = useCallback(() => {
     const audioContext = audioContextRef.current;
     if (!audioContext) {
@@ -113,7 +114,7 @@ export function useStereoAudioPlayback({
       return;
     }
 
-    // Check if we have any audio to play
+    // Check if we have any audio to play - process ONE queue at a time (serial, not parallel)
     const hasAgent = agentQueueRef.current.length > 0;
     const hasBorrower = borrowerQueueRef.current.length > 0;
 
@@ -126,59 +127,46 @@ export function useStereoAudioPlayback({
     isProcessingRef.current = true;
     setIsPlaying(true);
 
-    // Get next chunks (or empty if none)
-    const agentData = hasAgent ? agentQueueRef.current.shift()! : null;
-    const borrowerData = hasBorrower ? borrowerQueueRef.current.shift()! : null;
+    // Serial playback: prioritize agent queue, then borrower
+    // This prevents overlap - one speaker finishes before the next starts
+    let audioData: Float32Array;
+    let gainNode: GainNode | null;
 
-    // Determine max length for stereo buffer
-    const maxLength = Math.max(
-      agentData?.length || 0,
-      borrowerData?.length || 0
-    );
+    if (hasAgent) {
+      audioData = agentQueueRef.current.shift()!;
+      gainNode = agentGainRef.current;
+    } else {
+      audioData = borrowerQueueRef.current.shift()!;
+      gainNode = borrowerGainRef.current;
+    }
 
-    if (maxLength === 0) {
+    if (audioData.length === 0) {
       processQueue();
       return;
     }
 
-    // Create stereo audio buffer
+    // Create mono audio buffer (single channel)
     const audioBuffer = audioContext.createBuffer(
-      2, // stereo
-      maxLength,
+      1, // mono
+      audioData.length,
       sampleRate
     );
 
-    // Fill left channel (agent)
-    const leftChannel = audioBuffer.getChannelData(0);
-    if (agentData) {
-      leftChannel.set(agentData);
-    }
-
-    // Fill right channel (borrower)
-    const rightChannel = audioBuffer.getChannelData(1);
-    if (borrowerData) {
-      rightChannel.set(borrowerData);
-    }
+    // Fill the channel
+    const channel = audioBuffer.getChannelData(0);
+    channel.set(audioData);
 
     // Create buffer source
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
 
-    // Create channel splitter to route to separate gains
-    const splitter = audioContext.createChannelSplitter(2);
-    const merger = audioContext.createChannelMerger(2);
-
-    source.connect(splitter);
-
-    // Route left channel through agent gain
-    splitter.connect(agentGainRef.current!, 0);
-    agentGainRef.current!.connect(merger, 0, 0);
-
-    // Route right channel through borrower gain
-    splitter.connect(borrowerGainRef.current!, 1);
-    borrowerGainRef.current!.connect(merger, 0, 1);
-
-    merger.connect(audioContext.destination);
+    // Route through the appropriate gain node (for volume control)
+    if (gainNode) {
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+    } else {
+      source.connect(audioContext.destination);
+    }
 
     // Track active source for interruption
     activeSourceRef.current = source;
