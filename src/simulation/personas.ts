@@ -15,7 +15,6 @@ export const SUCCESSFUL_COLLECTION: VoicePersona = {
   path: [
     "OPENING",
     "DISCLOSURE",
-    "IDENTITY_VERIFICATION",
     "CONSENT_RECORDING",
     "DEBT_CONTEXT",
     "NEGOTIATION",
@@ -53,7 +52,6 @@ export const DISPUTER: VoicePersona = {
   path: [
     "OPENING",
     "DISCLOSURE",
-    "IDENTITY_VERIFICATION",
     "DEBT_CONTEXT",
     "DISPUTE_FLOW",
     "END_CALL",
@@ -137,7 +135,6 @@ export const CALLBACK_SCHEDULER: VoicePersona = {
   path: [
     "OPENING",
     "DISCLOSURE",
-    "IDENTITY_VERIFICATION",
     "CONSENT_RECORDING",
     "DEBT_CONTEXT",
     "NEGOTIATION",
@@ -169,7 +166,6 @@ export const ESCALATOR: VoicePersona = {
   path: [
     "OPENING",
     "DISCLOSURE",
-    "IDENTITY_VERIFICATION",
     "DEBT_CONTEXT",
     "ESCALATE_HUMAN",
     "END_CALL",
