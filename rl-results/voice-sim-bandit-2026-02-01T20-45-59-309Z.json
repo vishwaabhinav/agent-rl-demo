@@ -1,0 +1,98 @@
+{
+  "type": "voice-simulation",
+  "simulationId": "sim-1769978743687-g94okg",
+  "persona": {
+    "id": "do-not-call",
+    "name": "DNC Requester",
+    "path": [
+      "OPENING",
+      "DO_NOT_CALL",
+      "END_CALL"
+    ]
+  },
+  "policyType": "bandit",
+  "trainTimeMs": 14671,
+  "numEpisodes": 1,
+  "learningCurve": [
+    {
+      "episode": 1,
+      "trainReturn": 0
+    }
+  ],
+  "episodes": [
+    {
+      "episodeId": "sim-1769978743687-g94okg",
+      "persona": "do-not-call",
+      "outcome": "CONVERSATION_ENDED",
+      "totalReturn": 0,
+      "turns": 2,
+      "durationMs": 14671,
+      "finalState": "END_CALL",
+      "pathCompleted": true,
+      "transcript": [
+        {
+          "role": "agent",
+          "text": "Hello, good evening. Am I speaking with John Smith?",
+          "timestamp": "2026-02-01T20:45:45.965Z"
+        },
+        {
+          "role": "user",
+          "text": "Stop calling me. I don't want any more calls. Put me on your do not call list.",
+          "timestamp": "2026-02-01T20:45:49.585Z"
+        },
+        {
+          "role": "agent",
+          "text": "Understood, John. I'll stop the calls and mark your number on our do-not-call list. Thank you for your time. Goodbye.",
+          "timestamp": "2026-02-01T20:45:52.439Z"
+        },
+        {
+          "role": "user",
+          "text": "Yes, do not contact me again.",
+          "timestamp": "2026-02-01T20:45:55.810Z"
+        },
+        {
+          "role": "agent",
+          "text": "Understood. We'll immediately stop all contact. Thank you for your time. Goodbye.",
+          "timestamp": "2026-02-01T20:45:57.854Z"
+        }
+      ],
+      "decisions": [
+        {
+          "turn": 1,
+          "selectedAction": "PROCEED",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 1
+        },
+        {
+          "turn": 2,
+          "selectedAction": "PROCEED",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        }
+      ]
+    }
+  ],
+  "finalMetrics": {
+    "avgReturn": 0,
+    "successRate": 1,
+    "avgTurns": 2,
+    "avgDurationMs": 14671
+  },
+  "evalResults": [
+    {
+      "episodeId": "sim-1769978743687-g94okg",
+      "outcome": "CONVERSATION_ENDED",
+      "return": 0
+    }
+  ]
+}

@@ -58,9 +58,46 @@ export function useStereoAudioPlayback({
   }, [borrowerVolume]);
 
   // Set current speaker (called when speech starts)
+  // When speaker changes, stop current playback and clear old speaker's queue
   const setCurrentSpeaker = useCallback((speaker: "agent" | "borrower") => {
-    console.log(`[Audio] Speaker changed to: ${speaker}`);
+    const previousSpeaker = currentSpeakerRef.current;
+
+    if (previousSpeaker === speaker) {
+      // Same speaker, no change needed
+      return;
+    }
+
+    console.log(`[Audio] Speaker changed: ${previousSpeaker} → ${speaker}`);
     currentSpeakerRef.current = speaker;
+
+    // Stop any currently playing audio
+    if (activeSourceRef.current) {
+      try {
+        activeSourceRef.current.stop();
+      } catch {
+        // Source may already be stopped
+      }
+      activeSourceRef.current = null;
+    }
+
+    // Clear the old speaker's queue
+    if (previousSpeaker === "agent") {
+      console.log(`[Audio] Clearing agent queue (${agentQueueRef.current.length} chunks)`);
+      agentQueueRef.current = [];
+    } else if (previousSpeaker === "borrower") {
+      console.log(`[Audio] Clearing borrower queue (${borrowerQueueRef.current.length} chunks)`);
+      borrowerQueueRef.current = [];
+    }
+
+    // Reset playback timing
+    if (audioContextRef.current) {
+      nextPlayTimeRef.current = audioContextRef.current.currentTime;
+    }
+
+    // Restart processing for new speaker's queue
+    if (!isProcessingRef.current) {
+      processQueue();
+    }
   }, []);
 
   // Queue agent audio
