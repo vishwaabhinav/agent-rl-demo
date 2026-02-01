@@ -366,16 +366,27 @@ async function handleAgentTurnComplete(
   }
 
   // Send buffered agent audio to borrower all at once
-  console.log("[Orchestrator] Sending", turnState.agentAudioBuffer.length, "audio chunks to borrower");
+  const audioChunks = turnState.agentAudioBuffer.length;
+  console.log("[Orchestrator] Sending", audioChunks, "audio chunks to borrower");
   for (const audio of turnState.agentAudioBuffer) {
     session.borrowerSession?.sendAudio(audio);
   }
   turnState.agentAudioBuffer = []; // Clear buffer
 
-  // Now trigger borrower to respond
+  // Now trigger borrower to respond (with small delay to let audio buffer fill)
   console.log("[Orchestrator] Triggering borrower response");
   turnState.currentSpeaker = "borrower";
-  session.borrowerSession?.commitAudioAndRespond();
+
+  if (audioChunks > 0) {
+    // Small delay to ensure audio is buffered before commit
+    setTimeout(() => {
+      session.borrowerSession?.commitAudioAndRespond();
+    }, 100);
+  } else {
+    // No audio to commit, just trigger response directly
+    console.log("[Orchestrator] No audio buffered, triggering response without commit");
+    session.borrowerSession?.triggerResponse();
+  }
 }
 
 /**
@@ -437,16 +448,27 @@ async function handleBorrowerTurnComplete(
   }
 
   // Send buffered borrower audio to agent all at once
-  console.log("[Orchestrator] Sending", turnState.borrowerAudioBuffer.length, "audio chunks to agent");
+  const audioChunks = turnState.borrowerAudioBuffer.length;
+  console.log("[Orchestrator] Sending", audioChunks, "audio chunks to agent");
   for (const audio of turnState.borrowerAudioBuffer) {
     session.agentSession?.sendAudio(audio);
   }
   turnState.borrowerAudioBuffer = []; // Clear buffer
 
-  // Now trigger agent to respond
+  // Now trigger agent to respond (with small delay to let audio buffer fill)
   console.log("[Orchestrator] Triggering agent response");
   turnState.currentSpeaker = "agent";
-  session.agentSession?.commitAudioAndRespond();
+
+  if (audioChunks > 0) {
+    // Small delay to ensure audio is buffered before commit
+    setTimeout(() => {
+      session.agentSession?.commitAudioAndRespond();
+    }, 100);
+  } else {
+    // No audio to commit, just trigger response directly
+    console.log("[Orchestrator] No audio buffered, triggering response without commit");
+    session.agentSession?.triggerResponse();
+  }
 }
 
 /**
