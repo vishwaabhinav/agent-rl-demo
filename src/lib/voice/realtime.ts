@@ -311,15 +311,24 @@ export function createFloorController(config: FloorControllerConfig): FloorContr
     transferFloor(): void {
       if (isTransitioning) return;
 
-      isTransitioning = true;
-      transferTimeout = setTimeout(() => {
-        const nextSpeaker = currentSpeaker === "agent" ? "borrower" : "agent";
+      const nextSpeaker = currentSpeaker === "agent" ? "borrower" : "agent";
+
+      if (config.floorTransferDelayMs === 0) {
+        // Synchronous transfer for simulation (avoids async timing issues)
         console.log(`[Floor] Transferring floor to ${nextSpeaker}`);
         currentSpeaker = nextSpeaker;
         state = TurnState.IDLE;
-        isTransitioning = false;
-        transferTimeout = null;
-      }, config.floorTransferDelayMs);
+      } else {
+        // Async transfer with delay for production
+        isTransitioning = true;
+        transferTimeout = setTimeout(() => {
+          console.log(`[Floor] Transferring floor to ${nextSpeaker}`);
+          currentSpeaker = nextSpeaker;
+          state = TurnState.IDLE;
+          isTransitioning = false;
+          transferTimeout = null;
+        }, config.floorTransferDelayMs);
+      }
     },
   };
 
@@ -348,10 +357,12 @@ export function createConnectedRealtimeSessions(
   floor: FloorController;
 } {
   // Create floor controller for turn-taking
+  // Note: floorTransferDelayMs: 0 because OpenAI Realtime API generates audio immediately
+  // and any delay causes "buffer too small" errors
   const floor = createFloorController({
     mode: "simulation",
     allowBargeIn: false,
-    floorTransferDelayMs: 200,
+    floorTransferDelayMs: 0,
     ...floorConfig,
   });
 
