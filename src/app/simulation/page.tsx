@@ -25,21 +25,15 @@ export default function SimulationPage() {
     clearBorrowerQueue,
   } = useStereoAudioPlayback({ enabled: true });
 
-  // Audio callbacks for socket - includes turn-taking (clear other queue on speech start)
+  // Audio callbacks for socket
+  // Note: Don't clear queues on speech start - the orchestrator enforces strict turns,
+  // so audio arrives sequentially. Clearing cuts off the current speaker prematurely.
   const audioCallbacks = useMemo(
     () => ({
       onAgentAudio: queueAgentAudio,
       onBorrowerAudio: queueBorrowerAudio,
-      onAgentSpeechStart: () => {
-        console.log("[Audio] Agent speech start - clearing borrower queue");
-        clearBorrowerQueue();
-      },
-      onBorrowerSpeechStart: () => {
-        console.log("[Audio] Borrower speech start - clearing agent queue");
-        clearAgentQueue();
-      },
     }),
-    [queueAgentAudio, queueBorrowerAudio, clearAgentQueue, clearBorrowerQueue]
+    [queueAgentAudio, queueBorrowerAudio]
   );
 
   // Simulation socket connection
