@@ -99,13 +99,12 @@ export function FSMDiagram() {
 
     const mainFlow: Edge[] = [
       { id: "e1", source: "OPENING", target: "DISCLOSURE" },
-      { id: "e2", source: "DISCLOSURE", target: "IDENTITY_VERIFICATION" },
-      { id: "e3", source: "IDENTITY_VERIFICATION", target: "CONSENT_RECORDING" },
-      { id: "e4", source: "CONSENT_RECORDING", target: "DEBT_CONTEXT" },
-      { id: "e5", source: "DEBT_CONTEXT", target: "NEGOTIATION" },
-      { id: "e6", source: "NEGOTIATION", target: "PAYMENT_SETUP" },
-      { id: "e7", source: "PAYMENT_SETUP", target: "WRAPUP" },
-      { id: "e8", source: "WRAPUP", target: "END_CALL" },
+      { id: "e2", source: "DISCLOSURE", target: "CONSENT_RECORDING" },
+      { id: "e3", source: "CONSENT_RECORDING", target: "DEBT_CONTEXT" },
+      { id: "e4", source: "DEBT_CONTEXT", target: "NEGOTIATION" },
+      { id: "e5", source: "NEGOTIATION", target: "PAYMENT_SETUP" },
+      { id: "e6", source: "PAYMENT_SETUP", target: "WRAPUP" },
+      { id: "e7", source: "WRAPUP", target: "END_CALL" },
     ].map((e) => ({
       ...e,
       type: "smoothstep",
@@ -119,12 +118,37 @@ export function FSMDiagram() {
       },
     }));
 
+    // Optional identity verification path (shown with dashed lines)
+    const optionalEdgeStyle = {
+      stroke: "#6b7a8f",
+      strokeWidth: 1.5,
+      strokeDasharray: "5,5",
+    };
+
+    const optionalFlow: Edge[] = [
+      { id: "e-opt-1", source: "DISCLOSURE", target: "IDENTITY_VERIFICATION" },
+      { id: "e-opt-2", source: "IDENTITY_VERIFICATION", target: "CONSENT_RECORDING" },
+    ].map((e) => ({
+      ...e,
+      type: "smoothstep",
+      style: isEdgeActive(e.source as FSMState, e.target as FSMState)
+        ? activeEdgeStyle
+        : optionalEdgeStyle,
+      animated: isEdgeActive(e.source as FSMState, e.target as FSMState),
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: isEdgeActive(e.source as FSMState, e.target as FSMState) ? "#00d4ff" : "#6b7a8f",
+        width: 12,
+        height: 12,
+      },
+    }));
+
     const branchEntries: Edge[] = [
-      { id: "e9", source: "IDENTITY_VERIFICATION", target: "WRONG_PARTY_FLOW" },
-      { id: "e10", source: "DEBT_CONTEXT", target: "DISPUTE_FLOW" },
-      { id: "e11", source: "NEGOTIATION", target: "CALLBACK_SCHEDULED" },
-      { id: "e12", source: "NEGOTIATION", target: "DO_NOT_CALL" },
-      { id: "e13", source: "NEGOTIATION", target: "ESCALATE_HUMAN" },
+      { id: "e8", source: "IDENTITY_VERIFICATION", target: "WRONG_PARTY_FLOW" },
+      { id: "e9", source: "DEBT_CONTEXT", target: "DISPUTE_FLOW" },
+      { id: "e10", source: "NEGOTIATION", target: "CALLBACK_SCHEDULED" },
+      { id: "e11", source: "NEGOTIATION", target: "DO_NOT_CALL" },
+      { id: "e12", source: "NEGOTIATION", target: "ESCALATE_HUMAN" },
     ].map((e) => ({
       ...e,
       type: "smoothstep",
@@ -141,11 +165,11 @@ export function FSMDiagram() {
     }));
 
     const branchExits: Edge[] = [
-      { id: "e14", source: "WRONG_PARTY_FLOW", target: "END_CALL" },
-      { id: "e15", source: "DISPUTE_FLOW", target: "END_CALL" },
-      { id: "e16", source: "CALLBACK_SCHEDULED", target: "END_CALL" },
-      { id: "e17", source: "DO_NOT_CALL", target: "END_CALL" },
-      { id: "e18", source: "ESCALATE_HUMAN", target: "END_CALL" },
+      { id: "e13", source: "WRONG_PARTY_FLOW", target: "END_CALL" },
+      { id: "e14", source: "DISPUTE_FLOW", target: "END_CALL" },
+      { id: "e15", source: "CALLBACK_SCHEDULED", target: "END_CALL" },
+      { id: "e16", source: "DO_NOT_CALL", target: "END_CALL" },
+      { id: "e17", source: "ESCALATE_HUMAN", target: "END_CALL" },
     ].map((e) => ({
       ...e,
       type: "smoothstep",
@@ -161,7 +185,7 @@ export function FSMDiagram() {
       },
     }));
 
-    return [...mainFlow, ...branchEntries, ...branchExits];
+    return [...mainFlow, ...optionalFlow, ...branchEntries, ...branchExits];
   }, [stateHistory]);
 
   const onNodeClick = useCallback(() => {
