@@ -38,7 +38,7 @@ export const SUCCESSFUL_COLLECTION: VoicePersona = {
     NEGOTIATION: "Express willingness to pay. Ask about payment plan options. Eventually agree to a plan.",
     PAYMENT_SETUP: "Provide payment method details when asked (use fake card ending in 1234).",
     WRAPUP: "Confirm the agreement. Thank the agent.",
-    END_CALL: "Say goodbye politely.",
+    END_CALL: "Say ONE brief goodbye and stop. Do not respond further.",
   },
 };
 
@@ -152,7 +152,7 @@ export const CALLBACK_SCHEDULER: VoicePersona = {
     OPENING: "Confirm identity nervously.",
     NEGOTIATION: "Explain you can't pay right now - between jobs, waiting for paycheck. Ask to schedule a callback.",
     CALLBACK_SCHEDULED: "Agree to callback time. Provide preferred callback number.",
-    END_CALL: "Thank the agent for understanding.",
+    END_CALL: "Thank the agent briefly and end. Do not continue.",
   },
 };
 
@@ -181,7 +181,7 @@ export const ESCALATOR: VoicePersona = {
     OPENING: "Confirm identity but sound impatient.",
     DEBT_CONTEXT: "After hearing about debt, demand to speak with a supervisor or manager.",
     ESCALATE_HUMAN: "Insist on speaking with someone higher up. 'I need to talk to your manager.'",
-    END_CALL: "Expect a callback from supervisor.",
+    END_CALL: "Acknowledge the callback and say goodbye once. Stop responding.",
   },
 };
 
