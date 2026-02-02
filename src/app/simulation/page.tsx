@@ -17,6 +17,7 @@ export default function SimulationPage() {
     queueAgentAudio,
     queueBorrowerAudio,
     setCurrentSpeaker,
+    hasQueuedAudio,
     agentVolume,
     setAgentVolume,
     borrowerVolume,
@@ -54,7 +55,9 @@ export default function SimulationPage() {
     resetSimulation,
   } = useSimulationSocket(audioCallbacks);
 
-  const isRunning = status === "starting" || status === "active";
+  // Consider simulation "running" if status is active OR if audio is still playing
+  const isAudioStillPlaying = isAudioPlaying || hasQueuedAudio();
+  const isRunning = status === "starting" || status === "active" || (status === "completed" && isAudioStillPlaying);
 
   // Transform messages for DualTranscript
   const transcriptMessages = useMemo(
@@ -107,8 +110,15 @@ export default function SimulationPage() {
           </div>
         )}
 
-        {/* Result Display */}
-        {result && status === "completed" && (
+        {/* Result Display - show "finishing" while audio still playing */}
+        {result && status === "completed" && isAudioStillPlaying && (
+          <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            <h3 className="text-sm font-medium text-amber-400 mb-2">Finishing audio playback...</h3>
+          </div>
+        )}
+
+        {/* Final result - only show when audio is done */}
+        {result && status === "completed" && !isAudioStillPlaying && (
           <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
             <h3 className="text-sm font-medium text-blue-400 mb-2">Simulation Complete</h3>
             <div className="grid grid-cols-4 gap-4 text-sm">

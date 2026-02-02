@@ -1,0 +1,98 @@
+{
+  "type": "voice-simulation",
+  "simulationId": "sim-1770018416250-caw1vr",
+  "persona": {
+    "id": "do-not-call",
+    "name": "DNC Requester",
+    "path": [
+      "OPENING",
+      "DO_NOT_CALL",
+      "END_CALL"
+    ]
+  },
+  "policyType": "bandit",
+  "trainTimeMs": 19513,
+  "numEpisodes": 1,
+  "learningCurve": [
+    {
+      "episode": 1,
+      "trainReturn": 0
+    }
+  ],
+  "episodes": [
+    {
+      "episodeId": "sim-1770018416250-caw1vr",
+      "persona": "do-not-call",
+      "outcome": "CONVERSATION_ENDED",
+      "totalReturn": 0,
+      "turns": 2,
+      "durationMs": 19513,
+      "finalState": "END_CALL",
+      "pathCompleted": true,
+      "transcript": [
+        {
+          "role": "agent",
+          "text": "Hello, good afternoon. Am I speaking with John Smith?",
+          "timestamp": "2026-02-02T07:46:59.211Z"
+        },
+        {
+          "role": "user",
+          "text": "Stop calling me. I don’t want any more calls. Put me on your do not call list.",
+          "timestamp": "2026-02-02T07:47:03.152Z"
+        },
+        {
+          "role": "agent",
+          "text": "Understood, John. I’ll stop all calls immediately. Thank you for your time.",
+          "timestamp": "2026-02-02T07:47:05.621Z"
+        },
+        {
+          "role": "user",
+          "text": "Yes, do not contact me again.",
+          "timestamp": "2026-02-02T07:47:08.810Z"
+        },
+        {
+          "role": "agent",
+          "text": "I completely respect your request. We won't call again. Thank you, and take care.",
+          "timestamp": "2026-02-02T07:47:10.889Z"
+        }
+      ],
+      "decisions": [
+        {
+          "turn": 1,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        },
+        {
+          "turn": 2,
+          "selectedAction": "OFFER_PLAN",
+          "availableActions": [
+            "PROCEED",
+            "EMPATHIZE",
+            "OFFER_PLAN",
+            "ASK_CLARIFY"
+          ],
+          "policyDecisionMs": 0
+        }
+      ]
+    }
+  ],
+  "finalMetrics": {
+    "avgReturn": 0,
+    "successRate": 1,
+    "avgTurns": 2,
+    "avgDurationMs": 19513
+  },
+  "evalResults": [
+    {
+      "episodeId": "sim-1770018416250-caw1vr",
+      "outcome": "CONVERSATION_ENDED",
+      "return": 0
+    }
+  ]
+}

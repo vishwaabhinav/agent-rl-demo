@@ -258,6 +258,27 @@ export function useStereoAudioPlayback({
     };
   }, [stop]);
 
+  // Check if any audio is queued or playing
+  const hasQueuedAudio = useCallback(() => {
+    return agentQueueRef.current.length > 0 ||
+           borrowerQueueRef.current.length > 0 ||
+           activeSourcesRef.current.size > 0;
+  }, []);
+
+  // Wait for all audio to finish playing
+  const waitForAudioComplete = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      const checkComplete = () => {
+        if (!hasQueuedAudio() && !isProcessingRef.current) {
+          resolve();
+        } else {
+          setTimeout(checkComplete, 100);
+        }
+      };
+      checkComplete();
+    });
+  }, [hasQueuedAudio]);
+
   return {
     isPlaying,
     queueAgentAudio,
@@ -266,6 +287,8 @@ export function useStereoAudioPlayback({
     clearQueue,
     clearAgentQueue,
     clearBorrowerQueue,
+    hasQueuedAudio,
+    waitForAudioComplete,
     stop,
     // Volume controls
     agentVolume,
