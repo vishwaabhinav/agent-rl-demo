@@ -10,7 +10,7 @@ export interface TranscriptMessage {
   text: string;
   timestamp: Date;
   isFinal: boolean;
-  receivedAt: number; // Unix timestamp for syncing with audio playback
+  turnNumber: number; // Which turn this message belongs to (for syncing with audio)
 }
 
 export interface Decision {
@@ -53,6 +53,9 @@ export interface AudioCallbacks {
 export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  // Track turn numbers for text sync - increments each time speaker changes
+  const turnNumberRef = useRef(0);
+  const lastSpeakerRef = useRef<"agent" | "borrower" | null>(null);
   const [state, setState] = useState<SimulationState>({
     simulationId: null,
     status: "idle",
@@ -94,6 +97,9 @@ export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
       policyType: string;
     }) => {
       console.log("[SimSocket] Simulation starting:", data.simulationId);
+      // Reset turn tracking
+      turnNumberRef.current = 0;
+      lastSpeakerRef.current = null;
       setState((prev) => ({
         ...prev,
         simulationId: data.simulationId,
@@ -125,14 +131,19 @@ export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
       timestamp: string;
     }) => {
       if (data.isFinal) {
-        const now = Date.now();
+        // Increment turn number when speaker changes
+        if (lastSpeakerRef.current !== data.side) {
+          turnNumberRef.current++;
+          lastSpeakerRef.current = data.side;
+        }
+
         const message: TranscriptMessage = {
-          id: `msg-${now}-${data.side}`,
+          id: `msg-${Date.now()}-${data.side}`,
           side: data.side,
           text: data.text,
           timestamp: new Date(data.timestamp),
           isFinal: true,
-          receivedAt: now, // For syncing with audio playback
+          turnNumber: turnNumberRef.current,
         };
         setState((prev) => ({
           ...prev,

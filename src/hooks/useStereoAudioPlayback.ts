@@ -18,8 +18,10 @@ export function useStereoAudioPlayback({
   enabled = true,
 }: UseStereoAudioPlaybackOptions = {}) {
   const [isPlaying, setIsPlaying] = useState(false);
-  // Track the timestamp of the most recently played chunk (for text sync)
-  const [playbackTimestamp, setPlaybackTimestamp] = useState(0);
+  // Track which speaker is currently playing (for text sync)
+  const [currentPlayingSpeaker, setCurrentPlayingSpeaker] = useState<"agent" | "borrower" | null>(null);
+  // Track turn number - increments each time speaker changes (for filtering messages)
+  const [playedTurnCount, setPlayedTurnCount] = useState(0);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   // Single unified queue with timestamps - plays in arrival order
@@ -29,7 +31,7 @@ export function useStereoAudioPlayback({
   // Track ALL active sources (Web Audio can have multiple scheduled)
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
-  // Track current speaker (for UI/logging only)
+  // Track current speaker internally
   const currentSpeakerRef = useRef<"agent" | "borrower" | null>(null);
 
   // Volume controls (0-1)
@@ -139,13 +141,13 @@ export function useStereoAudioPlayback({
     isProcessingRef.current = true;
     setIsPlaying(true);
 
-    // Update playback timestamp for text sync
-    setPlaybackTimestamp(chunk.timestamp);
-
-    // Log speaker changes
+    // Track speaker changes for text sync
     if (currentSpeakerRef.current !== chunk.side) {
       console.log(`[Audio] Now playing: ${chunk.side} (timestamp: ${chunk.timestamp})`);
       currentSpeakerRef.current = chunk.side;
+      setCurrentPlayingSpeaker(chunk.side);
+      // Increment turn count when speaker changes - this reveals their messages
+      setPlayedTurnCount((prev) => prev + 1);
     }
 
     // Create mono audio buffer
@@ -195,7 +197,8 @@ export function useStereoAudioPlayback({
     isProcessingRef.current = false;
     currentSpeakerRef.current = null;
     setIsPlaying(false);
-    setPlaybackTimestamp(0);
+    setCurrentPlayingSpeaker(null);
+    setPlayedTurnCount(0);
 
     // Stop all active sources
     for (const source of activeSourcesRef.current) {
@@ -258,14 +261,10 @@ export function useStereoAudioPlayback({
     });
   }, [hasQueuedAudio]);
 
-  // Reveal all text (for when simulation completes)
-  const revealAllText = useCallback(() => {
-    setPlaybackTimestamp(Date.now());
-  }, []);
-
   return {
     isPlaying,
-    playbackTimestamp, // For text sync
+    currentPlayingSpeaker, // Which speaker's audio is currently playing
+    playedTurnCount, // Increments each speaker change - for syncing text
     queueAgentAudio,
     queueBorrowerAudio,
     setCurrentSpeaker,
@@ -274,7 +273,6 @@ export function useStereoAudioPlayback({
     clearBorrowerQueue,
     hasQueuedAudio,
     waitForAudioComplete,
-    revealAllText,
     stop,
     // Volume controls
     agentVolume,

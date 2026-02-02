@@ -14,7 +14,7 @@ export default function SimulationPage() {
   // Audio playback with turn-taking
   const {
     isPlaying: isAudioPlaying,
-    playbackTimestamp,
+    playedTurnCount,
     queueAgentAudio,
     queueBorrowerAudio,
     setCurrentSpeaker,
@@ -24,7 +24,6 @@ export default function SimulationPage() {
     borrowerVolume,
     setBorrowerVolume,
     clearQueue: clearAudioQueue,
-    revealAllText,
   } = useStereoAudioPlayback({ enabled: true });
 
   // Audio callbacks for socket - sets current speaker on speech start for turn-taking
@@ -61,21 +60,19 @@ export default function SimulationPage() {
   const isAudioStillPlaying = isAudioPlaying || hasQueuedAudio();
   const isRunning = status === "starting" || status === "active" || (status === "completed" && isAudioStillPlaying);
 
-  // Filter and transform messages for DualTranscript - sync with audio playback
-  // Text appears ahead of audio playback (larger buffer to account for audio queue depth)
-  const TEXT_LEAD_TIME_MS = 3000;
-
+  // Filter messages by turn number - show messages from turns that have started playing
+  // Plus one turn ahead so text appears just before audio starts
   const transcriptMessages = useMemo(() => {
     // Show all messages when idle (before start) or when audio finished
     const showAll = status === "idle" || (status === "completed" && !isAudioStillPlaying);
 
     return messages
-      .filter((m) => showAll || m.receivedAt <= playbackTimestamp + TEXT_LEAD_TIME_MS)
+      .filter((m) => showAll || m.turnNumber <= playedTurnCount + 1)
       .map((m) => ({
         ...m,
         timestamp: new Date(m.timestamp),
       }));
-  }, [messages, playbackTimestamp, status, isAudioStillPlaying]);
+  }, [messages, playedTurnCount, status, isAudioStillPlaying]);
 
   const handleStart = useCallback(
     (config: { personaId: string; policyType: string; policyId?: string }) => {
