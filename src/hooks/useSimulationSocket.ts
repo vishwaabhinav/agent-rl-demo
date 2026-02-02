@@ -10,6 +10,7 @@ export interface TranscriptMessage {
   text: string;
   timestamp: Date;
   isFinal: boolean;
+  receivedAt: number; // Unix timestamp for syncing with audio playback
 }
 
 export interface Decision {
@@ -124,12 +125,14 @@ export function useSimulationSocket(audioCallbacks?: AudioCallbacks) {
       timestamp: string;
     }) => {
       if (data.isFinal) {
+        const now = Date.now();
         const message: TranscriptMessage = {
-          id: `msg-${Date.now()}-${data.side}`,
+          id: `msg-${now}-${data.side}`,
           side: data.side,
           text: data.text,
           timestamp: new Date(data.timestamp),
           isFinal: true,
+          receivedAt: now, // For syncing with audio playback
         };
         setState((prev) => ({
           ...prev,

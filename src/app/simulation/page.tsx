@@ -14,6 +14,7 @@ export default function SimulationPage() {
   // Audio playback with turn-taking
   const {
     isPlaying: isAudioPlaying,
+    playbackTimestamp,
     queueAgentAudio,
     queueBorrowerAudio,
     setCurrentSpeaker,
@@ -23,6 +24,7 @@ export default function SimulationPage() {
     borrowerVolume,
     setBorrowerVolume,
     clearQueue: clearAudioQueue,
+    revealAllText,
   } = useStereoAudioPlayback({ enabled: true });
 
   // Audio callbacks for socket - sets current speaker on speech start for turn-taking
@@ -59,15 +61,18 @@ export default function SimulationPage() {
   const isAudioStillPlaying = isAudioPlaying || hasQueuedAudio();
   const isRunning = status === "starting" || status === "active" || (status === "completed" && isAudioStillPlaying);
 
-  // Transform messages for DualTranscript
-  const transcriptMessages = useMemo(
-    () =>
-      messages.map((m) => ({
+  // Filter and transform messages for DualTranscript - sync with audio playback
+  const transcriptMessages = useMemo(() => {
+    // Show all messages when idle (before start) or when audio finished
+    const showAll = status === "idle" || (status === "completed" && !isAudioStillPlaying);
+
+    return messages
+      .filter((m) => showAll || m.receivedAt <= playbackTimestamp)
+      .map((m) => ({
         ...m,
         timestamp: new Date(m.timestamp),
-      })),
-    [messages]
-  );
+      }));
+  }, [messages, playbackTimestamp, status, isAudioStillPlaying]);
 
   const handleStart = useCallback(
     (config: { personaId: string; policyType: string; policyId?: string }) => {

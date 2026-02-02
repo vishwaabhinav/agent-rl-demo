@@ -18,6 +18,8 @@ export function useStereoAudioPlayback({
   enabled = true,
 }: UseStereoAudioPlaybackOptions = {}) {
   const [isPlaying, setIsPlaying] = useState(false);
+  // Track the timestamp of the most recently played chunk (for text sync)
+  const [playbackTimestamp, setPlaybackTimestamp] = useState(0);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   // Single unified queue with timestamps - plays in arrival order
@@ -137,6 +139,9 @@ export function useStereoAudioPlayback({
     isProcessingRef.current = true;
     setIsPlaying(true);
 
+    // Update playback timestamp for text sync
+    setPlaybackTimestamp(chunk.timestamp);
+
     // Log speaker changes
     if (currentSpeakerRef.current !== chunk.side) {
       console.log(`[Audio] Now playing: ${chunk.side} (timestamp: ${chunk.timestamp})`);
@@ -190,6 +195,7 @@ export function useStereoAudioPlayback({
     isProcessingRef.current = false;
     currentSpeakerRef.current = null;
     setIsPlaying(false);
+    setPlaybackTimestamp(0);
 
     // Stop all active sources
     for (const source of activeSourcesRef.current) {
@@ -252,8 +258,14 @@ export function useStereoAudioPlayback({
     });
   }, [hasQueuedAudio]);
 
+  // Reveal all text (for when simulation completes)
+  const revealAllText = useCallback(() => {
+    setPlaybackTimestamp(Date.now());
+  }, []);
+
   return {
     isPlaying,
+    playbackTimestamp, // For text sync
     queueAgentAudio,
     queueBorrowerAudio,
     setCurrentSpeaker,
@@ -262,6 +274,7 @@ export function useStereoAudioPlayback({
     clearBorrowerQueue,
     hasQueuedAudio,
     waitForAudioComplete,
+    revealAllText,
     stop,
     // Volume controls
     agentVolume,
