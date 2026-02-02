@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 
+interface AudioChunk {
+  timestamp: number;
+  side: "agent" | "borrower";
+  data: Float32Array;
+}
+
 interface UseStereoAudioPlaybackOptions {
   sampleRate?: number;
   enabled?: boolean;
@@ -14,18 +20,15 @@ export function useStereoAudioPlayback({
   const [isPlaying, setIsPlaying] = useState(false);
 
   const audioContextRef = useRef<AudioContext | null>(null);
-  const agentQueueRef = useRef<Float32Array[]>([]);
-  const borrowerQueueRef = useRef<Float32Array[]>([]);
+  // Single unified queue with timestamps - plays in arrival order
+  const audioQueueRef = useRef<AudioChunk[]>([]);
   const isProcessingRef = useRef(false);
   const nextPlayTimeRef = useRef(0);
   // Track ALL active sources (Web Audio can have multiple scheduled)
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
-  // Track current speaker (from backend events)
+  // Track current speaker (for UI/logging only)
   const currentSpeakerRef = useRef<"agent" | "borrower" | null>(null);
-
-  // Track which queue we're currently draining (commit to one until empty)
-  const playingQueueRef = useRef<"agent" | "borrower" | null>(null);
 
   // Volume controls (0-1)
   const agentGainRef = useRef<GainNode | null>(null);
@@ -61,9 +64,7 @@ export function useStereoAudioPlayback({
     }
   }, [borrowerVolume]);
 
-  // Set current speaker (called when speech starts)
-  // Note: We DON'T clear queues here - that cuts off the previous speaker
-  // Just track who's speaking for prioritization
+  // Set current speaker (for UI tracking only)
   const setCurrentSpeaker = useCallback((speaker: "agent" | "borrower") => {
     if (currentSpeakerRef.current !== speaker) {
       console.log(`[Audio] Speaker: ${currentSpeakerRef.current} → ${speaker}`);
@@ -71,9 +72,9 @@ export function useStereoAudioPlayback({
     }
   }, []);
 
-  // Queue agent audio
-  const queueAgentAudio = useCallback(
-    (base64Audio: string) => {
+  // Queue audio chunk with timestamp
+  const queueAudio = useCallback(
+    (side: "agent" | "borrower", base64Audio: string) => {
       if (!enabled) return;
 
       try {
@@ -84,44 +85,38 @@ export function useStereoAudioPlayback({
 
         const int16Data = base64ToInt16(base64Audio);
         const float32Data = int16ToFloat32(int16Data);
-        agentQueueRef.current.push(float32Data);
+
+        // Add to unified queue with timestamp
+        const chunk: AudioChunk = {
+          timestamp: Date.now(),
+          side,
+          data: float32Data,
+        };
+        audioQueueRef.current.push(chunk);
 
         if (!isProcessingRef.current) {
           processQueue();
         }
       } catch (error) {
-        console.error("[Audio] Error queueing agent audio:", error);
+        console.error(`[Audio] Error queueing ${side} audio:`, error);
       }
     },
     [enabled, initAudioContext]
+  );
+
+  // Queue agent audio
+  const queueAgentAudio = useCallback(
+    (base64Audio: string) => queueAudio("agent", base64Audio),
+    [queueAudio]
   );
 
   // Queue borrower audio
   const queueBorrowerAudio = useCallback(
-    (base64Audio: string) => {
-      if (!enabled) return;
-
-      try {
-        const audioContext = initAudioContext();
-        if (audioContext.state === "suspended") {
-          audioContext.resume();
-        }
-
-        const int16Data = base64ToInt16(base64Audio);
-        const float32Data = int16ToFloat32(int16Data);
-        borrowerQueueRef.current.push(float32Data);
-
-        if (!isProcessingRef.current) {
-          processQueue();
-        }
-      } catch (error) {
-        console.error("[Audio] Error queueing borrower audio:", error);
-      }
-    },
-    [enabled, initAudioContext]
+    (base64Audio: string) => queueAudio("borrower", base64Audio),
+    [queueAudio]
   );
 
-  // Process queued audio - plays ONLY current speaker's audio (turn-taking)
+  // Process queued audio - plays chunks in timestamp order (FIFO)
   const processQueue = useCallback(() => {
     const audioContext = audioContextRef.current;
     if (!audioContext) {
@@ -130,35 +125,10 @@ export function useStereoAudioPlayback({
       return;
     }
 
-    // Commit to one queue until empty (prevents interleaving/overlap)
-    let audioData: Float32Array | null = null;
-    let gainNode: GainNode | null = null;
+    // Get next chunk from unified queue (already in arrival order)
+    const chunk = audioQueueRef.current.shift();
 
-    // If we're already playing from a queue and it still has data, continue with it
-    if (playingQueueRef.current === "agent" && agentQueueRef.current.length > 0) {
-      audioData = agentQueueRef.current.shift()!;
-      gainNode = agentGainRef.current;
-    } else if (playingQueueRef.current === "borrower" && borrowerQueueRef.current.length > 0) {
-      audioData = borrowerQueueRef.current.shift()!;
-      gainNode = borrowerGainRef.current;
-    } else {
-      // Current queue is empty, switch to whichever has data
-      if (agentQueueRef.current.length > 0) {
-        playingQueueRef.current = "agent";
-        audioData = agentQueueRef.current.shift()!;
-        gainNode = agentGainRef.current;
-        console.log(`[Audio] Now playing: agent queue`);
-      } else if (borrowerQueueRef.current.length > 0) {
-        playingQueueRef.current = "borrower";
-        audioData = borrowerQueueRef.current.shift()!;
-        gainNode = borrowerGainRef.current;
-        console.log(`[Audio] Now playing: borrower queue`);
-      } else {
-        playingQueueRef.current = null;
-      }
-    }
-
-    if (!audioData || audioData.length === 0) {
+    if (!chunk || chunk.data.length === 0) {
       isProcessingRef.current = false;
       setIsPlaying(false);
       return;
@@ -167,29 +137,36 @@ export function useStereoAudioPlayback({
     isProcessingRef.current = true;
     setIsPlaying(true);
 
+    // Log speaker changes
+    if (currentSpeakerRef.current !== chunk.side) {
+      console.log(`[Audio] Now playing: ${chunk.side} (timestamp: ${chunk.timestamp})`);
+      currentSpeakerRef.current = chunk.side;
+    }
+
     // Create mono audio buffer
     const audioBuffer = audioContext.createBuffer(
       1, // mono
-      audioData.length,
+      chunk.data.length,
       sampleRate
     );
 
     // Fill the channel
     const channel = audioBuffer.getChannelData(0);
-    channel.set(audioData);
+    channel.set(chunk.data);
 
     // Create buffer source
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
 
-    // Route through the appropriate gain node
+    // Route through the appropriate gain node based on side
+    const gainNode = chunk.side === "agent" ? agentGainRef.current : borrowerGainRef.current;
     if (gainNode) {
       source.connect(gainNode);
     } else {
       source.connect(audioContext.destination);
     }
 
-    // Track this source (for cleanup when speaker changes)
+    // Track this source
     activeSourcesRef.current.add(source);
 
     // Schedule playback
@@ -206,23 +183,12 @@ export function useStereoAudioPlayback({
     };
   }, [sampleRate]);
 
-  // Clear specific queue
-  const clearAgentQueue = useCallback(() => {
-    agentQueueRef.current = [];
-  }, []);
-
-  const clearBorrowerQueue = useCallback(() => {
-    borrowerQueueRef.current = [];
-  }, []);
-
   // Clear all audio queues and stop current playback
   const clearQueue = useCallback(() => {
-    agentQueueRef.current = [];
-    borrowerQueueRef.current = [];
+    audioQueueRef.current = [];
     nextPlayTimeRef.current = 0;
     isProcessingRef.current = false;
     currentSpeakerRef.current = null;
-    playingQueueRef.current = null;
     setIsPlaying(false);
 
     // Stop all active sources
@@ -238,6 +204,15 @@ export function useStereoAudioPlayback({
     if (audioContextRef.current) {
       nextPlayTimeRef.current = audioContextRef.current.currentTime;
     }
+  }, []);
+
+  // Legacy clear functions (now just clear the unified queue)
+  const clearAgentQueue = useCallback(() => {
+    audioQueueRef.current = audioQueueRef.current.filter((c) => c.side !== "agent");
+  }, []);
+
+  const clearBorrowerQueue = useCallback(() => {
+    audioQueueRef.current = audioQueueRef.current.filter((c) => c.side !== "borrower");
   }, []);
 
   // Stop all playback
@@ -260,9 +235,7 @@ export function useStereoAudioPlayback({
 
   // Check if any audio is queued or playing
   const hasQueuedAudio = useCallback(() => {
-    return agentQueueRef.current.length > 0 ||
-           borrowerQueueRef.current.length > 0 ||
-           activeSourcesRef.current.size > 0;
+    return audioQueueRef.current.length > 0 || activeSourcesRef.current.size > 0;
   }, []);
 
   // Wait for all audio to finish playing
