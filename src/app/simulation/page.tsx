@@ -62,12 +62,15 @@ export default function SimulationPage() {
   const isRunning = status === "starting" || status === "active" || (status === "completed" && isAudioStillPlaying);
 
   // Filter and transform messages for DualTranscript - sync with audio playback
+  // Text appears ahead of audio playback (larger buffer to account for audio queue depth)
+  const TEXT_LEAD_TIME_MS = 3000;
+
   const transcriptMessages = useMemo(() => {
     // Show all messages when idle (before start) or when audio finished
     const showAll = status === "idle" || (status === "completed" && !isAudioStillPlaying);
 
     return messages
-      .filter((m) => showAll || m.receivedAt <= playbackTimestamp)
+      .filter((m) => showAll || m.receivedAt <= playbackTimestamp + TEXT_LEAD_TIME_MS)
       .map((m) => ({
         ...m,
         timestamp: new Date(m.timestamp),
