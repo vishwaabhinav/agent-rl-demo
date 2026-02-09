@@ -50,8 +50,8 @@ next-env.d.ts
 /rl-results/
 q-table-*.csv
 
-# design plans
-/docs/plans/
+# docs
+/docs/
 
 # claude code config
 .claude/
