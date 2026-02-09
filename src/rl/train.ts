@@ -252,7 +252,8 @@ async function runBanditExperiment(
 async function runQLearningExperiment(
   env: DebtCollectionEnv,
   config: TrainingConfig = DEFAULT_TRAINING_CONFIG,
-  continueFrom?: string
+  continueFrom?: string,
+  alpha: number = 0.1
 ): Promise<TrainingResult> {
   console.log("\n" + "=".repeat(60));
   console.log(continueFrom ? "Q-LEARNING TRAINING (CONTINUED)" : "Q-LEARNING TRAINING");
@@ -275,10 +276,11 @@ async function runQLearningExperiment(
   } else {
     qlearner = new QLearner({
       ...DEFAULT_QLEARNING_CONFIG,
-      alpha: 0.1,
+      alpha,
       gamma: 0.95,
       epsilon: 0.15,
     });
+    console.log(`Using alpha=${alpha}, gamma=0.95, epsilon=0.15`);
   }
 
   const result = await trainAndEvaluate(env, qlearner, config);
@@ -406,12 +408,14 @@ Options:
   --episodes N     Override number of training episodes
   --eval-episodes N  Override number of evaluation episodes (default: 20, final eval runs 2x)
   --no-eval        Skip final evaluation entirely (just train and save)
+  --alpha N        Learning rate for Q-learning (default: 0.1)
   --continue ID    Continue training from a previous experiment
   --help           Show this help message
 
 Examples:
   npx tsx src/rl/train.ts bandit --quick                      # Fast training
   npx tsx src/rl/train.ts bandit --episodes 200               # Train for 200 episodes
+  npx tsx src/rl/train.ts qlearning --alpha 0.5 --episodes 5  # Q-learning with higher learning rate
   npx tsx src/rl/train.ts list                                # List previous experiments
   npx tsx src/rl/train.ts bandit --continue <experiment-id>   # Continue from previous
   npx tsx src/rl/train.ts qlearning --continue <id> --episodes 500  # Continue with 500 more episodes
@@ -454,6 +458,13 @@ async function main(): Promise<void> {
   // Parse no-eval flag
   const skipEval = args.includes("--no-eval");
 
+  // Parse alpha (learning rate) override
+  let alphaOverride: number | undefined;
+  const alphaIdx = args.indexOf("--alpha");
+  if (alphaIdx !== -1 && args[alphaIdx + 1]) {
+    alphaOverride = parseFloat(args[alphaIdx + 1]);
+  }
+
   // Parse continue from
   let continueFrom: string | undefined;
   const continueIdx = args.indexOf("--continue");
@@ -466,7 +477,8 @@ async function main(): Promise<void> {
     !a.startsWith("--") &&
     a !== continueFrom &&
     a !== String(episodesOverride) &&
-    a !== String(evalEpisodesOverride)
+    a !== String(evalEpisodesOverride) &&
+    a !== String(alphaOverride)
   ) || "all";
 
   // Handle list command (doesn't need environment)
@@ -515,7 +527,7 @@ async function main(): Promise<void> {
       break;
 
     case "qlearning":
-      await runQLearningExperiment(env, config, continueFrom);
+      await runQLearningExperiment(env, config, continueFrom, alphaOverride ?? 0.1);
       break;
 
     case "compare":

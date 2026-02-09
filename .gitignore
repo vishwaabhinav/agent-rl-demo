@@ -52,3 +52,6 @@ q-table-*.csv
 
 # design plans
 /docs/plans/
+
+# claude code config
+.claude/
