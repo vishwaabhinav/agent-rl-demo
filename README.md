@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Agent
 
-## Getting Started
+A voice-based AI agent platform for debt collection, combining real-time voice interactions with reinforcement learning for policy optimization.
 
-First, run the development server:
+## Architecture
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+React UI (Next.js)  <-->  Node.js Server (Socket.io)  <-->  OpenAI Realtime API
+                               |
+                     FSM Engine + Policy Engine
+                               |
+                     RL Framework (Bandit / Q-learning)
+                               |
+                     Borrower Simulator + Evaluation
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Core layers:**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Voice Agent** — Real-time WebSocket connection to OpenAI Realtime API with VAD, Whisper transcription, TTS, and floor control for turn-taking
+- **FSM Choreography** — 14-state finite state machine governing the call flow (opening → disclosure → identity verification → negotiation → payment setup), with LLM-based state classification and policy compliance enforcement
+- **RL Training** — Contextual bandit and Q-learning implementations with an OpenAI Gym-like environment wrapper, reward shaping, and LLM-powered borrower simulation
+- **Interactive UI** — 3-pane layout with live FSM visualization, synchronized transcript/audio playback, decision trace panel, and RL metrics dashboard
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Tech Stack
 
-## Learn More
+| Layer | Tech |
+|-------|------|
+| Framework | Next.js 16, React 19 |
+| Styling | Tailwind CSS 4, shadcn/ui |
+| State | Zustand |
+| Real-time | Socket.io |
+| Voice | OpenAI Realtime API, Whisper, TTS, VAD |
+| LLM | GPT-4 |
+| RL | Custom bandit + Q-learning implementations |
+| Database | SQLite (better-sqlite3) |
+| Visualization | React Flow, Recharts |
 
-To learn more about Next.js, take a look at the following resources:
+## Setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# Install dependencies
+yarn install
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Configure environment
+cp .env.example .env.local
+# Edit .env.local with your OpenAI API key
 
-## Deploy on Vercel
+# Start development server (WebSocket + Next.js)
+yarn dev        # WebSocket server with hot reload
+yarn dev:next   # Next.js dev server (separate terminal)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command | Description |
+|---------|-------------|
+| `yarn dev` | Start WebSocket server with nodemon |
+| `yarn dev:next` | Start Next.js dev server |
+| `yarn dev:demo` | Start Next.js in demo mode |
+| `yarn build` | Production build |
+| `yarn test` | Run tests |
+| `yarn lint` | Run ESLint |
+
+## Project Structure
+
+```
+src/
+├── app/                  # Next.js app router (pages + API routes)
+├── components/           # React components (UI, FSM viz, voice, RL dashboard)
+├── hooks/                # React hooks (audio capture, playback, sockets)
+├── stores/               # Zustand state stores
+├── lib/
+│   ├── agent/            # Unified agent abstraction + I/O adapters
+│   ├── engine/           # FSM, policy engine, turn processor, validators
+│   ├── voice/            # Voice session, floor control, state classification
+│   ├── llm/              # OpenAI client + prompt templates
+│   ├── db/               # SQLite queries
+│   └── types.ts          # Core domain types
+├── rl/
+│   ├── learners/         # Bandit, Q-learning, baselines
+│   ├── environment/      # Gym-like wrapper, state extraction, rewards
+│   ├── simulator/        # LLM-powered borrower personas
+│   └── evaluation/       # Metrics + evaluation runner
+└── simulation/           # Voice-to-voice simulation orchestrator
+server.ts                 # Node.js WebSocket/HTTP server
+```
